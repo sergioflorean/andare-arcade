@@ -228,3 +228,36 @@ The game must eventually run inside a physical arcade cabinet using:
 - USB encoder
 
 The operating system should not normally be visible to players.
+
+## Physical Arcade Compatibility
+
+The game must be designed from the beginning for installation in a real arcade cabinet.
+
+The software must not depend on:
+
+- mouse input
+- touch input
+- browser navigation
+- internet connectivity
+- modern display resolutions
+
+The game should support:
+
+- 4-way arcade joystick
+- primary fire button
+- secondary/special button
+- start button
+- optional coin/service inputs
+
+Input handling must be abstracted so the same gameplay code can support:
+
+- keyboard during development
+- USB arcade encoders
+- gamepads
+- arcade/JAMMA-compatible interfaces
+
+The game must use a fixed logical resolution and scale safely to different physical displays.
+
+The final build should be capable of launching automatically in fullscreen/kiosk mode when the arcade machine boots.
+
+The core game must remain playable offline.
