@@ -81,8 +81,7 @@ export class GameScene extends Phaser.Scene {
     createBossTexture(this);
     createBossProjectileTexture(this);
 
-    this.inputManager =
-      new InputManager(this);
+    this.inputManager = new InputManager(this);
 
     this.player = new Player(
       this,
@@ -93,32 +92,31 @@ export class GameScene extends Phaser.Scene {
 
     this.createHud();
 
-    this.waveManager =
-      new WaveManager(
-        this,
+    this.waveManager = new WaveManager(
+      this,
 
-        (
-          x: number,
-          pattern: EnemyPattern,
-        ) => {
-          this.spawnEnemy(
-            x,
-            pattern,
-          );
-        },
+      (
+        x: number,
+        pattern: EnemyPattern,
+      ) => {
+        this.spawnEnemy(
+          x,
+          pattern,
+        );
+      },
 
-        (
-          waveNumber: number,
-        ) => {
-          this.updateWaveText(
-            waveNumber,
-          );
-        },
+      (
+        waveNumber: number,
+      ) => {
+        this.updateWaveText(
+          waveNumber,
+        );
+      },
 
-        () => {
-          this.handleWavesComplete();
-        },
-      );
+      () => {
+        this.handleWavesComplete();
+      },
+    );
 
     this.waveManager.start();
   }
@@ -172,13 +170,19 @@ export class GameScene extends Phaser.Scene {
     ) {
       this.boss.update(
         time,
+        this.player.x,
+        this.player.y,
         (
           x: number,
           y: number,
+          velocityX: number,
+          velocityY: number,
         ) => {
           this.spawnBossProjectile(
             x,
             y,
+            velocityX,
+            velocityY,
           );
         },
       );
@@ -303,6 +307,8 @@ export class GameScene extends Phaser.Scene {
   private spawnBossProjectile(
     x: number,
     y: number,
+    velocityX: number,
+    velocityY: number,
   ) {
     if (
       this.isGameOver ||
@@ -317,6 +323,8 @@ export class GameScene extends Phaser.Scene {
         this,
         x,
         y,
+        velocityX,
+        velocityY,
       );
 
     this.bossProjectiles.push(
@@ -514,9 +522,13 @@ export class GameScene extends Phaser.Scene {
   private startInvulnerabilityBlink() {
     this.tweens.add({
       targets: this.player,
+
       alpha: 0.25,
+
       duration: 100,
+
       yoyo: true,
+
       repeat: 6,
 
       onComplete: () => {
