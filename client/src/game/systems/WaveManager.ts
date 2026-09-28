@@ -20,6 +20,8 @@ type WaveChangeCallback = (
   waveNumber: number,
 ) => void;
 
+type WavesCompleteCallback = () => void;
+
 const WAVE_DELAY = 1500;
 
 export class WaveManager {
@@ -27,10 +29,13 @@ export class WaveManager {
 
   private spawnEnemy: SpawnEnemyCallback;
   private onWaveChange: WaveChangeCallback;
+  private onWavesComplete: WavesCompleteCallback;
 
   private currentWaveIndex = 0;
   private pendingSpawns = 0;
+
   private waitingForNextWave = false;
+  private allWavesCompleted = false;
 
   private waves: WaveDefinition[] = [
     {
@@ -138,11 +143,14 @@ export class WaveManager {
     scene: Phaser.Scene,
     spawnEnemy: SpawnEnemyCallback,
     onWaveChange: WaveChangeCallback,
+    onWavesComplete: WavesCompleteCallback,
   ) {
     this.scene = scene;
 
     this.spawnEnemy = spawnEnemy;
     this.onWaveChange = onWaveChange;
+    this.onWavesComplete =
+      onWavesComplete;
   }
 
   start() {
@@ -150,6 +158,10 @@ export class WaveManager {
   }
 
   update(activeEnemyCount: number) {
+    if (this.allWavesCompleted) {
+      return;
+    }
+
     const waveFinished =
       activeEnemyCount === 0 &&
       this.pendingSpawns === 0;
@@ -167,9 +179,7 @@ export class WaveManager {
       this.waves[this.currentWaveIndex];
 
     if (!wave) {
-      this.currentWaveIndex = 0;
-
-      this.startCurrentWave();
+      this.completeWaves();
 
       return;
     }
@@ -207,17 +217,29 @@ export class WaveManager {
       () => {
         this.currentWaveIndex += 1;
 
+        this.waitingForNextWave = false;
+
         if (
           this.currentWaveIndex >=
           this.waves.length
         ) {
-          this.currentWaveIndex = 0;
-        }
+          this.completeWaves();
 
-        this.waitingForNextWave = false;
+          return;
+        }
 
         this.startCurrentWave();
       },
     );
+  }
+
+  private completeWaves() {
+    if (this.allWavesCompleted) {
+      return;
+    }
+
+    this.allWavesCompleted = true;
+
+    this.onWavesComplete();
   }
 }

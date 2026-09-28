@@ -3,6 +3,8 @@ import Phaser from "phaser";
 import { Player } from "../entities/Player";
 import { Projectile } from "../entities/Projectile";
 import { Enemy } from "../entities/Enemy";
+import { Boss } from "../entities/Boss";
+import { BossProjectile } from "../entities/BossProjectile";
 
 import { InputManager } from "../input/InputManager";
 import { WaveManager } from "../systems/WaveManager";
@@ -10,6 +12,8 @@ import { WaveManager } from "../systems/WaveManager";
 import { createClassicBoxTexture } from "../entities/createClassicBoxTexture";
 import { createSpaghettiShotTexture } from "../entities/createSpaghettiShotTexture";
 import { createTomatoEnemyTexture } from "../entities/createTomatoEnemyTexture";
+import { createBossTexture } from "../entities/createBossTexture";
+import { createBossProjectileTexture } from "../entities/createBossProjectileTexture";
 
 import type { EnemyPattern } from "../types";
 
@@ -17,6 +21,7 @@ const PLAYER_START_X = 112;
 const PLAYER_START_Y = 245;
 
 const RESPAWN_DELAY = 500;
+const BOSS_SCORE = 2000;
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
@@ -25,6 +30,12 @@ export class GameScene extends Phaser.Scene {
 
   private projectiles: Projectile[] = [];
   private enemies: Enemy[] = [];
+  private bossProjectiles: BossProjectile[] = [];
+
+  private boss?: Boss;
+
+  private bossHealthBarBackground?: Phaser.GameObjects.Graphics;
+  private bossHealthBar?: Phaser.GameObjects.Graphics;
 
   private score = 0;
   private lives = 3;
@@ -36,61 +47,81 @@ export class GameScene extends Phaser.Scene {
   private isPlayerInvulnerable = false;
   private isPlayerRespawning = false;
   private isGameOver = false;
+  private isBossActive = false;
+  private isStageClear = false;
 
   constructor() {
     super("GameScene");
   }
 
-create() {
-  this.physics.resume();
+  create() {
+    this.physics.resume();
 
-  this.score = 0;
-  this.lives = 3;
+    this.score = 0;
+    this.lives = 3;
 
-  this.projectiles = [];
-  this.enemies = [];
+    this.projectiles = [];
+    this.enemies = [];
+    this.bossProjectiles = [];
 
-  this.isPlayerInvulnerable = false;
-  this.isPlayerRespawning = false;
-  this.isGameOver = false;
+    this.boss = undefined;
 
-  createClassicBoxTexture(this);
-  createSpaghettiShotTexture(this);
-  createTomatoEnemyTexture(this);
+    this.bossHealthBar = undefined;
+    this.bossHealthBarBackground = undefined;
 
-  this.inputManager = new InputManager(this);
+    this.isPlayerInvulnerable = false;
+    this.isPlayerRespawning = false;
+    this.isGameOver = false;
+    this.isBossActive = false;
+    this.isStageClear = false;
 
-  this.player = new Player(
-    this,
-    PLAYER_START_X,
-    PLAYER_START_Y,
-    this.inputManager,
-  );
+    createClassicBoxTexture(this);
+    createSpaghettiShotTexture(this);
+    createTomatoEnemyTexture(this);
+    createBossTexture(this);
+    createBossProjectileTexture(this);
 
-  this.createHud();
+    this.inputManager =
+      new InputManager(this);
 
-  this.waveManager = new WaveManager(
-    this,
+    this.player = new Player(
+      this,
+      PLAYER_START_X,
+      PLAYER_START_Y,
+      this.inputManager,
+    );
 
-    (
-      x: number,
-      pattern: EnemyPattern,
-    ) => {
-      this.spawnEnemy(
-        x,
-        pattern,
+    this.createHud();
+
+    this.waveManager =
+      new WaveManager(
+        this,
+
+        (
+          x: number,
+          pattern: EnemyPattern,
+        ) => {
+          this.spawnEnemy(
+            x,
+            pattern,
+          );
+        },
+
+        (
+          waveNumber: number,
+        ) => {
+          this.updateWaveText(
+            waveNumber,
+          );
+        },
+
+        () => {
+          this.handleWavesComplete();
+        },
       );
-    },
 
-    (waveNumber: number) => {
-      this.updateWaveText(
-        waveNumber,
-      );
-    },
-  );
-
-  this.waveManager.start();
-}
+    this.waveManager.start();
+  }
 
   update(time: number) {
     if (this.isGameOver) {
@@ -100,6 +131,10 @@ create() {
         this.scene.restart();
       }
 
+      return;
+    }
+
+    if (this.isStageClear) {
       return;
     }
 
@@ -125,8 +160,34 @@ create() {
       },
     );
 
+    this.bossProjectiles.forEach(
+      (projectile) => {
+        projectile.update();
+      },
+    );
+
+    if (
+      this.boss &&
+      this.boss.active
+    ) {
+      this.boss.update(
+        time,
+        (
+          x: number,
+          y: number,
+        ) => {
+          this.spawnBossProjectile(
+            x,
+            y,
+          );
+        },
+      );
+    }
+
     this.checkProjectileEnemyCollisions();
+    this.checkProjectileBossCollisions();
     this.checkEnemyPlayerCollisions();
+    this.checkBossProjectilePlayerCollisions();
 
     this.projectiles =
       this.projectiles.filter(
@@ -138,6 +199,12 @@ create() {
       this.enemies.filter(
         (enemy) =>
           enemy.active,
+      );
+
+    this.bossProjectiles =
+      this.bossProjectiles.filter(
+        (projectile) =>
+          projectile.active,
       );
 
     this.waveManager.update(
@@ -213,7 +280,10 @@ create() {
     x: number,
     pattern: EnemyPattern,
   ) {
-    if (this.isGameOver) {
+    if (
+      this.isGameOver ||
+      this.isStageClear
+    ) {
       return;
     }
 
@@ -227,6 +297,30 @@ create() {
 
     this.enemies.push(
       enemy,
+    );
+  }
+
+  private spawnBossProjectile(
+    x: number,
+    y: number,
+  ) {
+    if (
+      this.isGameOver ||
+      this.isStageClear ||
+      !this.isBossActive
+    ) {
+      return;
+    }
+
+    const projectile =
+      new BossProjectile(
+        this,
+        x,
+        y,
+      );
+
+    this.bossProjectiles.push(
+      projectile,
     );
   }
 
@@ -260,6 +354,45 @@ create() {
     );
   }
 
+  private checkProjectileBossCollisions() {
+    if (
+      !this.boss ||
+      !this.boss.active ||
+      !this.isBossActive
+    ) {
+      return;
+    }
+
+    this.projectiles.forEach(
+      (projectile) => {
+        if (!projectile.active) {
+          return;
+        }
+
+        const hit =
+          this.physics.overlap(
+            projectile,
+            this.boss!,
+          );
+
+        if (!hit) {
+          return;
+        }
+
+        projectile.destroy();
+
+        const bossDefeated =
+          this.boss!.takeDamage();
+
+        this.updateBossHealthBar();
+
+        if (bossDefeated) {
+          this.defeatBoss();
+        }
+      },
+    );
+  }
+
   private checkEnemyPlayerCollisions() {
     if (
       this.isPlayerInvulnerable ||
@@ -285,6 +418,37 @@ create() {
 
           this.damagePlayer();
         }
+      },
+    );
+  }
+
+  private checkBossProjectilePlayerCollisions() {
+    if (
+      this.isPlayerInvulnerable ||
+      this.isPlayerRespawning
+    ) {
+      return;
+    }
+
+    this.bossProjectiles.forEach(
+      (projectile) => {
+        if (!projectile.active) {
+          return;
+        }
+
+        const hit =
+          this.physics.overlap(
+            this.player,
+            projectile,
+          );
+
+        if (!hit) {
+          return;
+        }
+
+        projectile.destroy();
+
+        this.damagePlayer();
       },
     );
   }
@@ -350,13 +514,9 @@ create() {
   private startInvulnerabilityBlink() {
     this.tweens.add({
       targets: this.player,
-
       alpha: 0.25,
-
       duration: 100,
-
       yoyo: true,
-
       repeat: 6,
 
       onComplete: () => {
@@ -502,5 +662,182 @@ create() {
         .toString()
         .padStart(2, "0")}`,
     );
+  }
+
+  private handleWavesComplete() {
+    this.startBossWarning();
+  }
+
+  private startBossWarning() {
+    this.waveText.setText(
+      "WARNING",
+    );
+
+    const warningText =
+      this.add
+        .text(
+          112,
+          130,
+          "WARNING",
+          {
+            fontFamily: "monospace",
+            fontSize: "18px",
+            color: "#e84a32",
+          },
+        )
+        .setOrigin(0.5);
+
+    this.tweens.add({
+      targets: warningText,
+      alpha: 0,
+      duration: 250,
+      yoyo: true,
+      repeat: 3,
+
+      onComplete: () => {
+        warningText.destroy();
+
+        if (
+          this.isGameOver ||
+          this.isStageClear
+        ) {
+          return;
+        }
+
+        this.spawnBoss();
+      },
+    });
+  }
+
+  private spawnBoss() {
+    this.isBossActive = true;
+
+    this.waveText.setText(
+      "BOSS",
+    );
+
+    this.boss =
+      new Boss(
+        this,
+        112,
+        55,
+      );
+
+    this.createBossHealthBar();
+  }
+
+  private createBossHealthBar() {
+    this.bossHealthBarBackground =
+      this.add.graphics();
+
+    this.bossHealthBar =
+      this.add.graphics();
+
+    this.bossHealthBarBackground.fillStyle(
+      0x5c201a,
+      1,
+    );
+
+    this.bossHealthBarBackground.fillRect(
+      42,
+      30,
+      140,
+      6,
+    );
+
+    this.updateBossHealthBar();
+  }
+
+  private updateBossHealthBar() {
+    if (
+      !this.boss ||
+      !this.bossHealthBar
+    ) {
+      return;
+    }
+
+    const healthPercent =
+      this.boss.getHealth() /
+      this.boss.getMaxHealth();
+
+    this.bossHealthBar.clear();
+
+    this.bossHealthBar.fillStyle(
+      0xe84a32,
+      1,
+    );
+
+    this.bossHealthBar.fillRect(
+      44,
+      32,
+      136 * healthPercent,
+      2,
+    );
+  }
+
+  private defeatBoss() {
+    if (!this.boss) {
+      return;
+    }
+
+    this.isBossActive = false;
+
+    this.boss.destroy();
+
+    this.bossProjectiles.forEach(
+      (projectile) => {
+        projectile.destroy();
+      },
+    );
+
+    this.bossProjectiles = [];
+
+    this.bossHealthBar?.destroy();
+    this.bossHealthBarBackground?.destroy();
+
+    this.addScore(
+      BOSS_SCORE,
+    );
+
+    this.stageClear();
+  }
+
+  private stageClear() {
+    this.isStageClear = true;
+
+    this.waveText.setText(
+      "STAGE CLEAR",
+    );
+
+    this.player.setVelocity(
+      0,
+      0,
+    );
+
+    this.add
+      .text(
+        112,
+        125,
+        "STAGE CLEAR",
+        {
+          fontFamily: "monospace",
+          fontSize: "14px",
+          color: "#f5e7c6",
+        },
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        112,
+        145,
+        "+2000",
+        {
+          fontFamily: "monospace",
+          fontSize: "8px",
+          color: "#e84a32",
+        },
+      )
+      .setOrigin(0.5);
   }
 }
