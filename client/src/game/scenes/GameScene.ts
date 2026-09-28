@@ -23,6 +23,8 @@ const PLAYER_START_Y = 245;
 const RESPAWN_DELAY = 500;
 const BOSS_SCORE = 2000;
 
+const MAX_STAGE = 2;
+
 export class GameScene extends Phaser.Scene {
   private player!: Player;
   private inputManager!: InputManager;
@@ -37,8 +39,15 @@ export class GameScene extends Phaser.Scene {
   private bossHealthBarBackground?: Phaser.GameObjects.Graphics;
   private bossHealthBar?: Phaser.GameObjects.Graphics;
 
+  private resultsContainer?: Phaser.GameObjects.Container;
+  private resultsStartText?: Phaser.GameObjects.Text;
+
+  private gameCompleteContainer?: Phaser.GameObjects.Container;
+  private gameCompleteStartText?: Phaser.GameObjects.Text;
+
   private score = 0;
   private lives = 3;
+  private currentStage = 1;
 
   private shotsFired = 0;
   private hits = 0;
@@ -54,6 +63,7 @@ export class GameScene extends Phaser.Scene {
   private isBossActive = false;
   private isStageClear = false;
   private isResultsVisible = false;
+  private isGameComplete = false;
 
   constructor() {
     super("GameScene");
@@ -64,10 +74,9 @@ export class GameScene extends Phaser.Scene {
 
     this.score = 0;
     this.lives = 3;
+    this.currentStage = 1;
 
-    this.shotsFired = 0;
-    this.hits = 0;
-    this.enemiesDefeated = 0;
+    this.resetStageStats();
 
     this.projectiles = [];
     this.enemies = [];
@@ -78,12 +87,19 @@ export class GameScene extends Phaser.Scene {
     this.bossHealthBar = undefined;
     this.bossHealthBarBackground = undefined;
 
+    this.resultsContainer = undefined;
+    this.resultsStartText = undefined;
+
+    this.gameCompleteContainer = undefined;
+    this.gameCompleteStartText = undefined;
+
     this.isPlayerInvulnerable = false;
     this.isPlayerRespawning = false;
     this.isGameOver = false;
     this.isBossActive = false;
     this.isStageClear = false;
     this.isResultsVisible = false;
+    this.isGameComplete = false;
 
     createClassicBoxTexture(this);
     createSpaghettiShotTexture(this);
@@ -103,36 +119,20 @@ export class GameScene extends Phaser.Scene {
 
     this.createHud();
 
-    this.waveManager = new WaveManager(
-      this,
-
-      (
-        x: number,
-        pattern: EnemyPattern,
-      ) => {
-        this.spawnEnemy(
-          x,
-          pattern,
-        );
-      },
-
-      (
-        waveNumber: number,
-      ) => {
-        this.updateWaveText(
-          waveNumber,
-        );
-      },
-
-      () => {
-        this.handleWavesComplete();
-      },
-    );
-
-    this.waveManager.start();
+    this.startStage();
   }
 
   update(time: number) {
+    if (this.isGameComplete) {
+      if (
+        this.inputManager.isStartPressed()
+      ) {
+        this.scene.restart();
+      }
+
+      return;
+    }
+
     if (this.isGameOver) {
       if (
         this.isResultsVisible &&
@@ -149,7 +149,14 @@ export class GameScene extends Phaser.Scene {
         this.isResultsVisible &&
         this.inputManager.isStartPressed()
       ) {
-        this.scene.restart();
+        if (
+          this.currentStage <
+          MAX_STAGE
+        ) {
+          this.startNextStage();
+        } else {
+          this.showGameComplete();
+        }
       }
 
       return;
@@ -235,6 +242,156 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
+  private startStage() {
+    this.waveManager =
+      new WaveManager(
+        this,
+        this.currentStage,
+
+        (
+          x: number,
+          pattern: EnemyPattern,
+        ) => {
+          this.spawnEnemy(
+            x,
+            pattern,
+          );
+        },
+
+        (
+          waveNumber: number,
+        ) => {
+          this.updateWaveText(
+            waveNumber,
+          );
+        },
+
+        () => {
+          this.handleWavesComplete();
+        },
+      );
+
+    this.waveManager.start();
+  }
+
+  private startNextStage() {
+    this.currentStage += 1;
+
+    this.destroyResultsScreen();
+
+    this.isStageClear = false;
+    this.isResultsVisible = false;
+    this.isBossActive = false;
+    this.isGameOver = false;
+
+    this.isPlayerInvulnerable = false;
+    this.isPlayerRespawning = false;
+
+    this.resetStageStats();
+
+    this.clearStageObjects();
+
+    this.boss = undefined;
+
+    this.destroyBossHealthBar();
+
+    this.player.setPosition(
+      PLAYER_START_X,
+      PLAYER_START_Y,
+    );
+
+    this.player.setVisible(true);
+    this.player.setAlpha(1);
+
+    this.player.setVelocity(
+      0,
+      0,
+    );
+
+    const body =
+      this.player
+        .body as Phaser.Physics.Arcade.Body;
+
+    body.enable = true;
+
+    this.physics.resume();
+
+    this.scoreText.setText(
+      this.score
+        .toString()
+        .padStart(6, "0"),
+    );
+
+    this.livesText.setText(
+      `LIVES ${this.lives}`,
+    );
+
+    this.showStageIntro();
+  }
+
+  private showStageIntro() {
+    this.waveText.setText(
+      `STAGE ${this.currentStage
+        .toString()
+        .padStart(2, "0")}`,
+    );
+
+    const stageText =
+      this.add
+        .text(
+          112,
+          130,
+          `STAGE ${this.currentStage
+            .toString()
+            .padStart(2, "0")}`,
+          {
+            fontFamily: "monospace",
+            fontSize: "16px",
+            color: "#f5e7c6",
+          },
+        )
+        .setOrigin(0.5);
+
+    this.time.delayedCall(
+      1000,
+      () => {
+        stageText.destroy();
+
+        this.startStage();
+      },
+    );
+  }
+
+  private resetStageStats() {
+    this.shotsFired = 0;
+    this.hits = 0;
+    this.enemiesDefeated = 0;
+  }
+
+  private clearStageObjects() {
+    this.projectiles.forEach(
+      (projectile) => {
+        projectile.destroy();
+      },
+    );
+
+    this.enemies.forEach(
+      (enemy) => {
+        enemy.destroy();
+      },
+    );
+
+    this.bossProjectiles.forEach(
+      (projectile) => {
+        projectile.destroy();
+      },
+    );
+
+    this.projectiles = [];
+    this.enemies = [];
+    this.bossProjectiles = [];
+  }
+
   private createHud() {
     this.add.text(
       8,
@@ -307,7 +464,8 @@ export class GameScene extends Phaser.Scene {
   ) {
     if (
       this.isGameOver ||
-      this.isStageClear
+      this.isStageClear ||
+      this.isGameComplete
     ) {
       return;
     }
@@ -334,6 +492,7 @@ export class GameScene extends Phaser.Scene {
     if (
       this.isGameOver ||
       this.isStageClear ||
+      this.isGameComplete ||
       !this.isBossActive
     ) {
       return;
@@ -552,13 +711,9 @@ export class GameScene extends Phaser.Scene {
   private startInvulnerabilityBlink() {
     this.tweens.add({
       targets: this.player,
-
       alpha: 0.25,
-
       duration: 100,
-
       yoyo: true,
-
       repeat: 6,
 
       onComplete: () => {
@@ -638,6 +793,7 @@ export class GameScene extends Phaser.Scene {
 
   private gameOver() {
     this.isGameOver = true;
+    this.isBossActive = false;
 
     this.physics.pause();
 
@@ -648,21 +804,12 @@ export class GameScene extends Phaser.Scene {
 
     this.player.setVisible(false);
 
-    this.projectiles.forEach(
-      (projectile) => {
-        projectile.destroy();
-      },
-    );
+    this.clearStageObjects();
 
-    this.projectiles = [];
+    this.boss?.destroy();
+    this.boss = undefined;
 
-    this.bossProjectiles.forEach(
-      (projectile) => {
-        projectile.destroy();
-      },
-    );
-
-    this.bossProjectiles = [];
+    this.destroyBossHealthBar();
 
     const gameOverText =
       this.add
@@ -737,13 +884,9 @@ export class GameScene extends Phaser.Scene {
 
     this.tweens.add({
       targets: warningText,
-
       alpha: 0,
-
       duration: 250,
-
       yoyo: true,
-
       repeat: 3,
 
       onComplete: () => {
@@ -751,7 +894,8 @@ export class GameScene extends Phaser.Scene {
 
         if (
           this.isGameOver ||
-          this.isStageClear
+          this.isStageClear ||
+          this.isGameComplete
         ) {
           return;
         }
@@ -827,6 +971,14 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
+  private destroyBossHealthBar() {
+    this.bossHealthBar?.destroy();
+    this.bossHealthBarBackground?.destroy();
+
+    this.bossHealthBar = undefined;
+    this.bossHealthBarBackground = undefined;
+  }
+
   private defeatBoss() {
     if (!this.boss) {
       return;
@@ -835,6 +987,7 @@ export class GameScene extends Phaser.Scene {
     this.isBossActive = false;
 
     this.boss.destroy();
+    this.boss = undefined;
 
     this.bossProjectiles.forEach(
       (projectile) => {
@@ -844,8 +997,7 @@ export class GameScene extends Phaser.Scene {
 
     this.bossProjectiles = [];
 
-    this.bossHealthBar?.destroy();
-    this.bossHealthBarBackground?.destroy();
+    this.destroyBossHealthBar();
 
     this.addScore(
       BOSS_SCORE,
@@ -894,7 +1046,9 @@ export class GameScene extends Phaser.Scene {
         stageClearText.destroy();
 
         this.showStageResults(
-          "STAGE 01 CLEAR",
+          `STAGE ${this.currentStage
+            .toString()
+            .padStart(2, "0")} CLEAR`,
         );
       },
     );
@@ -915,6 +1069,12 @@ export class GameScene extends Phaser.Scene {
             ) *
               100,
           );
+
+    this.resultsContainer =
+      this.add.container(
+        0,
+        0,
+      );
 
     const background =
       this.add.graphics();
@@ -944,85 +1104,91 @@ export class GameScene extends Phaser.Scene {
       204,
     );
 
-    this.add
-      .text(
-        112,
-        57,
-        title,
+    const titleText =
+      this.add
+        .text(
+          112,
+          57,
+          title,
+          {
+            fontFamily: "monospace",
+            fontSize: "12px",
+            color: "#f5e7c6",
+          },
+        )
+        .setOrigin(0.5);
+
+    const scoreResult =
+      this.add.text(
+        35,
+        88,
+        `SCORE      ${this.score
+          .toString()
+          .padStart(6, "0")}`,
         {
           fontFamily: "monospace",
-          fontSize: "12px",
+          fontSize: "8px",
           color: "#f5e7c6",
         },
-      )
-      .setOrigin(0.5);
+      );
 
-    this.add.text(
-      35,
-      88,
-      `SCORE      ${this.score
-        .toString()
-        .padStart(6, "0")}`,
-      {
-        fontFamily: "monospace",
-        fontSize: "8px",
-        color: "#f5e7c6",
-      },
-    );
+    const enemiesResult =
+      this.add.text(
+        35,
+        108,
+        `ENEMIES    ${this.enemiesDefeated
+          .toString()
+          .padStart(2, "0")}`,
+        {
+          fontFamily: "monospace",
+          fontSize: "8px",
+          color: "#f5e7c6",
+        },
+      );
 
-    this.add.text(
-      35,
-      108,
-      `ENEMIES    ${this.enemiesDefeated
-        .toString()
-        .padStart(2, "0")}`,
-      {
-        fontFamily: "monospace",
-        fontSize: "8px",
-        color: "#f5e7c6",
-      },
-    );
+    const shotsResult =
+      this.add.text(
+        35,
+        128,
+        `SHOTS      ${this.shotsFired
+          .toString()
+          .padStart(3, "0")}`,
+        {
+          fontFamily: "monospace",
+          fontSize: "8px",
+          color: "#f5e7c6",
+        },
+      );
 
-    this.add.text(
-      35,
-      128,
-      `SHOTS      ${this.shotsFired
-        .toString()
-        .padStart(3, "0")}`,
-      {
-        fontFamily: "monospace",
-        fontSize: "8px",
-        color: "#f5e7c6",
-      },
-    );
+    const hitsResult =
+      this.add.text(
+        35,
+        148,
+        `HITS       ${this.hits
+          .toString()
+          .padStart(3, "0")}`,
+        {
+          fontFamily: "monospace",
+          fontSize: "8px",
+          color: "#f5e7c6",
+        },
+      );
 
-    this.add.text(
-      35,
-      148,
-      `HITS       ${this.hits
-        .toString()
-        .padStart(3, "0")}`,
-      {
-        fontFamily: "monospace",
-        fontSize: "8px",
-        color: "#f5e7c6",
-      },
-    );
+    const accuracyResult =
+      this.add.text(
+        35,
+        168,
+        `ACCURACY   ${accuracy
+          .toString()
+          .padStart(3, " ")}%`,
+        {
+          fontFamily: "monospace",
+          fontSize: "8px",
+          color: "#e84a32",
+        },
+      );
 
-    this.add.text(
-      35,
-      168,
-      `ACCURACY   ${accuracy
-        .toString()
-        .padStart(3, " ")}%`,
-      {
-        fontFamily: "monospace",
-        fontSize: "8px",
-        color: "#e84a32",
-      },
-    );
-
-    const startText =
+    this.resultsStartText =
       this.add
         .text(
           112,
@@ -1036,8 +1202,166 @@ export class GameScene extends Phaser.Scene {
         )
         .setOrigin(0.5);
 
+    this.resultsContainer.add([
+      background,
+      titleText,
+      scoreResult,
+      enemiesResult,
+      shotsResult,
+      hitsResult,
+      accuracyResult,
+      this.resultsStartText,
+    ]);
+
     this.tweens.add({
-      targets: startText,
+      targets: this.resultsStartText,
+      alpha: 0,
+      duration: 500,
+      yoyo: true,
+      repeat: -1,
+    });
+  }
+
+  private destroyResultsScreen() {
+    if (this.resultsStartText) {
+      this.tweens.killTweensOf(
+        this.resultsStartText,
+      );
+    }
+
+    this.resultsContainer?.destroy(
+      true,
+    );
+
+    this.resultsContainer = undefined;
+    this.resultsStartText = undefined;
+
+    this.isResultsVisible = false;
+  }
+
+  private showGameComplete() {
+    this.destroyResultsScreen();
+
+    this.isStageClear = false;
+    this.isGameComplete = true;
+
+    this.player.setVelocity(
+      0,
+      0,
+    );
+
+    this.player.setVisible(false);
+
+    this.waveText.setText(
+      "COMPLETE",
+    );
+
+    this.gameCompleteContainer =
+      this.add.container(
+        0,
+        0,
+      );
+
+    const background =
+      this.add.graphics();
+
+    background.fillStyle(
+      0x17120d,
+      0.98,
+    );
+
+    background.fillRect(
+      12,
+      52,
+      200,
+      184,
+    );
+
+    background.lineStyle(
+      2,
+      0xe84a32,
+      1,
+    );
+
+    background.strokeRect(
+      12,
+      52,
+      200,
+      184,
+    );
+
+    const completeText =
+      this.add
+        .text(
+          112,
+          82,
+          "GAME COMPLETE",
+          {
+            fontFamily: "monospace",
+            fontSize: "14px",
+            color: "#f5e7c6",
+          },
+        )
+        .setOrigin(0.5);
+
+    const scoreLabel =
+      this.add
+        .text(
+          112,
+          125,
+          "FINAL SCORE",
+          {
+            fontFamily: "monospace",
+            fontSize: "8px",
+            color: "#e84a32",
+          },
+        )
+        .setOrigin(0.5);
+
+    const finalScore =
+      this.add
+        .text(
+          112,
+          145,
+          this.score
+            .toString()
+            .padStart(
+              6,
+              "0",
+            ),
+          {
+            fontFamily: "monospace",
+            fontSize: "16px",
+            color: "#f5e7c6",
+          },
+        )
+        .setOrigin(0.5);
+
+    this.gameCompleteStartText =
+      this.add
+        .text(
+          112,
+          205,
+          "PRESS START",
+          {
+            fontFamily: "monospace",
+            fontSize: "8px",
+            color: "#f5e7c6",
+          },
+        )
+        .setOrigin(0.5);
+
+    this.gameCompleteContainer.add([
+      background,
+      completeText,
+      scoreLabel,
+      finalScore,
+      this.gameCompleteStartText,
+    ]);
+
+    this.tweens.add({
+      targets:
+        this.gameCompleteStartText,
 
       alpha: 0,
 

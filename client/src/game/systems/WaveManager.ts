@@ -26,6 +26,7 @@ const WAVE_DELAY = 1500;
 
 export class WaveManager {
   private scene: Phaser.Scene;
+  private stage: number;
 
   private spawnEnemy: SpawnEnemyCallback;
   private onWaveChange: WaveChangeCallback;
@@ -37,127 +38,34 @@ export class WaveManager {
   private waitingForNextWave = false;
   private allWavesCompleted = false;
 
-  private waves: WaveDefinition[] = [
-    {
-      enemies: [
-        {
-          x: 40,
-          pattern: "straight",
-          delay: 0,
-        },
-        {
-          x: 76,
-          pattern: "zigzag",
-          delay: 450,
-        },
-        {
-          x: 112,
-          pattern: "straight",
-          delay: 900,
-        },
-        {
-          x: 148,
-          pattern: "zigzag",
-          delay: 1350,
-        },
-        {
-          x: 184,
-          pattern: "straight",
-          delay: 1800,
-        },
-      ],
-    },
-
-    {
-      enemies: [
-        {
-          x: 32,
-          pattern: "zigzag",
-          delay: 0,
-        },
-        {
-          x: 64,
-          pattern: "straight",
-          delay: 300,
-        },
-        {
-          x: 96,
-          pattern: "zigzag",
-          delay: 600,
-        },
-        {
-          x: 128,
-          pattern: "straight",
-          delay: 900,
-        },
-        {
-          x: 160,
-          pattern: "zigzag",
-          delay: 1200,
-        },
-        {
-          x: 192,
-          pattern: "straight",
-          delay: 1500,
-        },
-      ],
-    },
-
-    {
-      enemies: [
-        {
-          x: 40,
-          pattern: "zigzag",
-          delay: 0,
-        },
-        {
-          x: 72,
-          pattern: "zigzag",
-          delay: 250,
-        },
-        {
-          x: 104,
-          pattern: "straight",
-          delay: 500,
-        },
-        {
-          x: 136,
-          pattern: "straight",
-          delay: 750,
-        },
-        {
-          x: 168,
-          pattern: "zigzag",
-          delay: 1000,
-        },
-        {
-          x: 200,
-          pattern: "zigzag",
-          delay: 1250,
-        },
-      ],
-    },
-  ];
+  private waves: WaveDefinition[];
 
   constructor(
     scene: Phaser.Scene,
+    stage: number,
     spawnEnemy: SpawnEnemyCallback,
     onWaveChange: WaveChangeCallback,
     onWavesComplete: WavesCompleteCallback,
   ) {
     this.scene = scene;
+    this.stage = stage;
 
     this.spawnEnemy = spawnEnemy;
     this.onWaveChange = onWaveChange;
     this.onWavesComplete =
       onWavesComplete;
+
+    this.waves =
+      this.getWavesForStage();
   }
 
   start() {
     this.startCurrentWave();
   }
 
-  update(activeEnemyCount: number) {
+  update(
+    activeEnemyCount: number,
+  ) {
     if (this.allWavesCompleted) {
       return;
     }
@@ -174,9 +82,176 @@ export class WaveManager {
     }
   }
 
+  private getWavesForStage(): WaveDefinition[] {
+    if (this.stage === 2) {
+      return this.getStageTwoWaves();
+    }
+
+    return this.getStageOneWaves();
+  }
+
+  private getStageOneWaves(): WaveDefinition[] {
+    // TEST ONLY:
+    // Stage 01 currently has only 2 waves.
+
+    return [
+      {
+        enemies: [
+          {
+            x: 40,
+            pattern: "straight",
+            delay: 0,
+          },
+          {
+            x: 76,
+            pattern: "zigzag",
+            delay: 450,
+          },
+          {
+            x: 112,
+            pattern: "straight",
+            delay: 900,
+          },
+          {
+            x: 148,
+            pattern: "zigzag",
+            delay: 1350,
+          },
+          {
+            x: 184,
+            pattern: "straight",
+            delay: 1800,
+          },
+        ],
+      },
+
+      {
+        enemies: [
+          {
+            x: 32,
+            pattern: "zigzag",
+            delay: 0,
+          },
+          {
+            x: 64,
+            pattern: "straight",
+            delay: 300,
+          },
+          {
+            x: 96,
+            pattern: "zigzag",
+            delay: 600,
+          },
+          {
+            x: 128,
+            pattern: "straight",
+            delay: 900,
+          },
+          {
+            x: 160,
+            pattern: "zigzag",
+            delay: 1200,
+          },
+          {
+            x: 192,
+            pattern: "straight",
+            delay: 1500,
+          },
+        ],
+      },
+    ];
+  }
+
+  private getStageTwoWaves(): WaveDefinition[] {
+    // TEST ONLY:
+    // Stage 02 currently has only 2 waves.
+    //
+    // More zigzag enemies and shorter
+    // spawn delays make it harder.
+
+    return [
+      {
+        enemies: [
+          {
+            x: 28,
+            pattern: "zigzag",
+            delay: 0,
+          },
+          {
+            x: 60,
+            pattern: "zigzag",
+            delay: 250,
+          },
+          {
+            x: 92,
+            pattern: "straight",
+            delay: 500,
+          },
+          {
+            x: 124,
+            pattern: "zigzag",
+            delay: 750,
+          },
+          {
+            x: 156,
+            pattern: "straight",
+            delay: 1000,
+          },
+          {
+            x: 188,
+            pattern: "zigzag",
+            delay: 1250,
+          },
+        ],
+      },
+
+      {
+        enemies: [
+          {
+            x: 32,
+            pattern: "zigzag",
+            delay: 0,
+          },
+          {
+            x: 58,
+            pattern: "straight",
+            delay: 200,
+          },
+          {
+            x: 84,
+            pattern: "zigzag",
+            delay: 400,
+          },
+          {
+            x: 110,
+            pattern: "zigzag",
+            delay: 600,
+          },
+          {
+            x: 136,
+            pattern: "straight",
+            delay: 800,
+          },
+          {
+            x: 162,
+            pattern: "zigzag",
+            delay: 1000,
+          },
+          {
+            x: 188,
+            pattern: "zigzag",
+            delay: 1200,
+          },
+        ],
+      },
+    ];
+  }
+
   private startCurrentWave() {
     const wave =
-      this.waves[this.currentWaveIndex];
+      this.waves[
+        this.currentWaveIndex
+      ];
 
     if (!wave) {
       this.completeWaves();
@@ -187,7 +262,9 @@ export class WaveManager {
     const waveNumber =
       this.currentWaveIndex + 1;
 
-    this.onWaveChange(waveNumber);
+    this.onWaveChange(
+      waveNumber,
+    );
 
     this.pendingSpawns =
       wave.enemies.length;
