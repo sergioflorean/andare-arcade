@@ -1,12 +1,12 @@
 import Phaser from "phaser";
 
-const BOSS_PROJECTILE_SPEED = 90;
-
 export class BossProjectile extends Phaser.Physics.Arcade.Sprite {
   constructor(
     scene: Phaser.Scene,
     x: number,
     y: number,
+    velocityX: number,
+    velocityY: number,
   ) {
     super(
       scene,
@@ -18,16 +18,22 @@ export class BossProjectile extends Phaser.Physics.Arcade.Sprite {
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
-    this.setVelocityY(
-      BOSS_PROJECTILE_SPEED,
+    this.setVelocity(
+      velocityX,
+      velocityY,
     );
   }
 
   update() {
-    if (
-      this.y - this.height >
-      this.scene.scale.height
-    ) {
+    const margin = 12;
+
+    const isOutsideScreen =
+      this.y > this.scene.scale.height + margin ||
+      this.y < -margin ||
+      this.x < -margin ||
+      this.x > this.scene.scale.width + margin;
+
+    if (isOutsideScreen) {
       this.destroy();
     }
   }
