@@ -1,11 +1,6 @@
 import Phaser from "phaser";
-import { Player } from "../entities/Player";
-import { InputManager } from "../input/InputManager";
-import { createClassicBoxTexture } from "../entities/createClassicBoxTexture";
 
 export class ArcadeScene extends Phaser.Scene {
-  private player!: Player;
-
   constructor() {
     super("ArcadeScene");
   }
@@ -84,19 +79,12 @@ export class ArcadeScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    createClassicBoxTexture(this);
+    if (!this.input.keyboard) {
+      return;
+    }
 
-    const inputManager = new InputManager(this);
-
-    this.player = new Player(
-      this,
-      112,
-      245,
-      inputManager,
-    );
-  }
-
-  update() {
-    this.player.update();
+    this.input.keyboard.once("keydown-ENTER", () => {
+      this.scene.start("GameScene");
+    });
   }
 }
