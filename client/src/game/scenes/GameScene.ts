@@ -40,6 +40,10 @@ export class GameScene extends Phaser.Scene {
   private score = 0;
   private lives = 3;
 
+  private shotsFired = 0;
+  private hits = 0;
+  private enemiesDefeated = 0;
+
   private scoreText!: Phaser.GameObjects.Text;
   private waveText!: Phaser.GameObjects.Text;
   private livesText!: Phaser.GameObjects.Text;
@@ -49,6 +53,7 @@ export class GameScene extends Phaser.Scene {
   private isGameOver = false;
   private isBossActive = false;
   private isStageClear = false;
+  private isResultsVisible = false;
 
   constructor() {
     super("GameScene");
@@ -59,6 +64,10 @@ export class GameScene extends Phaser.Scene {
 
     this.score = 0;
     this.lives = 3;
+
+    this.shotsFired = 0;
+    this.hits = 0;
+    this.enemiesDefeated = 0;
 
     this.projectiles = [];
     this.enemies = [];
@@ -74,6 +83,7 @@ export class GameScene extends Phaser.Scene {
     this.isGameOver = false;
     this.isBossActive = false;
     this.isStageClear = false;
+    this.isResultsVisible = false;
 
     createClassicBoxTexture(this);
     createSpaghettiShotTexture(this);
@@ -81,7 +91,8 @@ export class GameScene extends Phaser.Scene {
     createBossTexture(this);
     createBossProjectileTexture(this);
 
-    this.inputManager = new InputManager(this);
+    this.inputManager =
+      new InputManager(this);
 
     this.player = new Player(
       this,
@@ -124,6 +135,7 @@ export class GameScene extends Phaser.Scene {
   update(time: number) {
     if (this.isGameOver) {
       if (
+        this.isResultsVisible &&
         this.inputManager.isStartPressed()
       ) {
         this.scene.restart();
@@ -133,6 +145,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.isStageClear) {
+      if (
+        this.isResultsVisible &&
+        this.inputManager.isStartPressed()
+      ) {
+        this.scene.restart();
+      }
+
       return;
     }
 
@@ -278,6 +297,8 @@ export class GameScene extends Phaser.Scene {
     this.projectiles.push(
       projectile,
     );
+
+    this.shotsFired += 1;
   }
 
   private spawnEnemy(
@@ -350,12 +371,17 @@ export class GameScene extends Phaser.Scene {
                 enemy,
               );
 
-            if (hit) {
-              projectile.destroy();
-              enemy.destroy();
-
-              this.addScore(100);
+            if (!hit) {
+              return;
             }
+
+            projectile.destroy();
+            enemy.destroy();
+
+            this.hits += 1;
+            this.enemiesDefeated += 1;
+
+            this.addScore(100);
           },
         );
       },
@@ -389,6 +415,8 @@ export class GameScene extends Phaser.Scene {
 
         projectile.destroy();
 
+        this.hits += 1;
+
         const bossDefeated =
           this.boss!.takeDamage();
 
@@ -421,11 +449,13 @@ export class GameScene extends Phaser.Scene {
             enemy,
           );
 
-        if (hit) {
-          enemy.destroy();
-
-          this.damagePlayer();
+        if (!hit) {
+          return;
         }
+
+        enemy.destroy();
+
+        this.damagePlayer();
       },
     );
   }
@@ -618,40 +648,46 @@ export class GameScene extends Phaser.Scene {
 
     this.player.setVisible(false);
 
-    this.add
-      .text(
-        112,
-        120,
-        "GAME OVER",
-        {
-          fontFamily: "monospace",
-          fontSize: "16px",
-          color: "#e84a32",
-        },
-      )
-      .setOrigin(0.5);
+    this.projectiles.forEach(
+      (projectile) => {
+        projectile.destroy();
+      },
+    );
 
-    const restartText =
+    this.projectiles = [];
+
+    this.bossProjectiles.forEach(
+      (projectile) => {
+        projectile.destroy();
+      },
+    );
+
+    this.bossProjectiles = [];
+
+    const gameOverText =
       this.add
         .text(
           112,
-          150,
-          "PRESS START",
+          130,
+          "GAME OVER",
           {
             fontFamily: "monospace",
-            fontSize: "8px",
-            color: "#f5e7c6",
+            fontSize: "16px",
+            color: "#e84a32",
           },
         )
         .setOrigin(0.5);
 
-    this.tweens.add({
-      targets: restartText,
-      alpha: 0,
-      duration: 500,
-      yoyo: true,
-      repeat: -1,
-    });
+    this.time.delayedCall(
+      1200,
+      () => {
+        gameOverText.destroy();
+
+        this.showStageResults(
+          "GAME OVER",
+        );
+      },
+    );
   }
 
   private addScore(
@@ -701,9 +737,13 @@ export class GameScene extends Phaser.Scene {
 
     this.tweens.add({
       targets: warningText,
+
       alpha: 0,
+
       duration: 250,
+
       yoyo: true,
+
       repeat: 3,
 
       onComplete: () => {
@@ -826,30 +866,186 @@ export class GameScene extends Phaser.Scene {
       0,
     );
 
+    this.projectiles.forEach(
+      (projectile) => {
+        projectile.destroy();
+      },
+    );
+
+    this.projectiles = [];
+
+    const stageClearText =
+      this.add
+        .text(
+          112,
+          130,
+          "STAGE CLEAR",
+          {
+            fontFamily: "monospace",
+            fontSize: "14px",
+            color: "#f5e7c6",
+          },
+        )
+        .setOrigin(0.5);
+
+    this.time.delayedCall(
+      1200,
+      () => {
+        stageClearText.destroy();
+
+        this.showStageResults(
+          "STAGE 01 CLEAR",
+        );
+      },
+    );
+  }
+
+  private showStageResults(
+    title: string,
+  ) {
+    this.isResultsVisible = true;
+
+    const accuracy =
+      this.shotsFired === 0
+        ? 0
+        : Math.round(
+            (
+              this.hits /
+              this.shotsFired
+            ) *
+              100,
+          );
+
+    const background =
+      this.add.graphics();
+
+    background.fillStyle(
+      0x17120d,
+      0.96,
+    );
+
+    background.fillRect(
+      12,
+      42,
+      200,
+      204,
+    );
+
+    background.lineStyle(
+      2,
+      0xe84a32,
+      1,
+    );
+
+    background.strokeRect(
+      12,
+      42,
+      200,
+      204,
+    );
+
     this.add
       .text(
         112,
-        125,
-        "STAGE CLEAR",
+        57,
+        title,
         {
           fontFamily: "monospace",
-          fontSize: "14px",
+          fontSize: "12px",
           color: "#f5e7c6",
         },
       )
       .setOrigin(0.5);
 
-    this.add
-      .text(
-        112,
-        145,
-        "+2000",
-        {
-          fontFamily: "monospace",
-          fontSize: "8px",
-          color: "#e84a32",
-        },
-      )
-      .setOrigin(0.5);
+    this.add.text(
+      35,
+      88,
+      `SCORE      ${this.score
+        .toString()
+        .padStart(6, "0")}`,
+      {
+        fontFamily: "monospace",
+        fontSize: "8px",
+        color: "#f5e7c6",
+      },
+    );
+
+    this.add.text(
+      35,
+      108,
+      `ENEMIES    ${this.enemiesDefeated
+        .toString()
+        .padStart(2, "0")}`,
+      {
+        fontFamily: "monospace",
+        fontSize: "8px",
+        color: "#f5e7c6",
+      },
+    );
+
+    this.add.text(
+      35,
+      128,
+      `SHOTS      ${this.shotsFired
+        .toString()
+        .padStart(3, "0")}`,
+      {
+        fontFamily: "monospace",
+        fontSize: "8px",
+        color: "#f5e7c6",
+      },
+    );
+
+    this.add.text(
+      35,
+      148,
+      `HITS       ${this.hits
+        .toString()
+        .padStart(3, "0")}`,
+      {
+        fontFamily: "monospace",
+        fontSize: "8px",
+        color: "#f5e7c6",
+      },
+    );
+
+    this.add.text(
+      35,
+      168,
+      `ACCURACY   ${accuracy
+        .toString()
+        .padStart(3, " ")}%`,
+      {
+        fontFamily: "monospace",
+        fontSize: "8px",
+        color: "#e84a32",
+      },
+    );
+
+    const startText =
+      this.add
+        .text(
+          112,
+          215,
+          "PRESS START",
+          {
+            fontFamily: "monospace",
+            fontSize: "8px",
+            color: "#f5e7c6",
+          },
+        )
+        .setOrigin(0.5);
+
+    this.tweens.add({
+      targets: startText,
+
+      alpha: 0,
+
+      duration: 500,
+
+      yoyo: true,
+
+      repeat: -1,
+    });
   }
 }
