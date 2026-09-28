@@ -2,7 +2,9 @@ import Phaser from "phaser";
 
 export class InputManager {
   private cursors: Phaser.Types.Input.Keyboard.CursorKeys;
+
   private fireKey: Phaser.Input.Keyboard.Key;
+  private startKey: Phaser.Input.Keyboard.Key;
 
   constructor(scene: Phaser.Scene) {
     if (!scene.input.keyboard) {
@@ -17,6 +19,11 @@ export class InputManager {
     this.fireKey =
       scene.input.keyboard.addKey(
         Phaser.Input.Keyboard.KeyCodes.SPACE,
+      );
+
+    this.startKey =
+      scene.input.keyboard.addKey(
+        Phaser.Input.Keyboard.KeyCodes.ENTER,
       );
   }
 
@@ -39,6 +46,12 @@ export class InputManager {
   isFirePressed() {
     return Phaser.Input.Keyboard.JustDown(
       this.fireKey,
+    );
+  }
+
+  isStartPressed() {
+    return Phaser.Input.Keyboard.JustDown(
+      this.startKey,
     );
   }
 }
