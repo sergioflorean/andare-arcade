@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { ArcadeScene } from "./scenes/ArcadeScene";
+import { GameScene } from "./scenes/GameScene";
 
 export const GAME_WIDTH = 224;
 export const GAME_HEIGHT = 288;
@@ -39,5 +40,5 @@ export const createGameConfig = (
     },
   },
 
-  scene: [ArcadeScene],
+  scene: [ArcadeScene, GameScene],
 });
