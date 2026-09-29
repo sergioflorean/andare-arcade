@@ -14,10 +14,15 @@ import { GameUI } from "../ui/GameUI";
 import { createClassicBoxTexture } from "../entities/createClassicBoxTexture";
 import { createSpaghettiShotTexture } from "../entities/createSpaghettiShotTexture";
 import { createTomatoEnemyTexture } from "../entities/createTomatoEnemyTexture";
+import { createForkEnemyTexture } from "../entities/createForkEnemyTexture";
+import { createGraterEnemyTexture } from "../entities/createGraterEnemyTexture";
 import { createBossTexture } from "../entities/createBossTexture";
 import { createBossProjectileTexture } from "../entities/createBossProjectileTexture";
 
-import type { EnemyPattern } from "../types";
+import type {
+  EnemyPattern,
+  EnemyType,
+} from "../types";
 
 const PLAYER_START_X = 112;
 const PLAYER_START_Y = 245;
@@ -63,11 +68,8 @@ export class GameScene extends Phaser.Scene {
   create() {
     this.physics.resume();
 
-    this.statsManager =
-      new StatsManager();
-
-    this.uiManager =
-      new GameUI(this);
+    this.statsManager = new StatsManager();
+    this.uiManager = new GameUI(this);
 
     this.lives = 3;
     this.currentStage = 1;
@@ -79,8 +81,7 @@ export class GameScene extends Phaser.Scene {
     this.boss = undefined;
 
     this.bossHealthBar = undefined;
-    this.bossHealthBarBackground =
-      undefined;
+    this.bossHealthBarBackground = undefined;
 
     this.isPlayerInvulnerable = false;
     this.isPlayerRespawning = false;
@@ -93,12 +94,15 @@ export class GameScene extends Phaser.Scene {
 
     createClassicBoxTexture(this);
     createSpaghettiShotTexture(this);
+
     createTomatoEnemyTexture(this);
+    createForkEnemyTexture(this);
+    createGraterEnemyTexture(this);
+
     createBossTexture(this);
     createBossProjectileTexture(this);
 
-    this.inputManager =
-      new InputManager(this);
+    this.inputManager = new InputManager(this);
 
     this.player = new Player(
       this,
@@ -117,9 +121,7 @@ export class GameScene extends Phaser.Scene {
 
   update(time: number) {
     if (this.isGameComplete) {
-      if (
-        this.inputManager.isStartPressed()
-      ) {
+      if (this.inputManager.isStartPressed()) {
         this.scene.restart();
       }
 
@@ -142,10 +144,7 @@ export class GameScene extends Phaser.Scene {
         this.isResultsVisible &&
         this.inputManager.isStartPressed()
       ) {
-        if (
-          this.currentStage <
-          MAX_STAGE
-        ) {
+        if (this.currentStage < MAX_STAGE) {
           this.startNextStage();
         } else {
           this.showGameComplete();
@@ -158,35 +157,24 @@ export class GameScene extends Phaser.Scene {
     if (!this.isPlayerRespawning) {
       this.player.update();
 
-      if (
-        this.inputManager.isFirePressed()
-      ) {
+      if (this.inputManager.isFirePressed()) {
         this.shoot();
       }
     }
 
-    this.projectiles.forEach(
-      (projectile) => {
-        projectile.update();
-      },
-    );
+    this.projectiles.forEach((projectile) => {
+      projectile.update();
+    });
 
-    this.enemies.forEach(
-      (enemy) => {
-        enemy.update(time);
-      },
-    );
+    this.enemies.forEach((enemy) => {
+      enemy.update(time);
+    });
 
-    this.bossProjectiles.forEach(
-      (projectile) => {
-        projectile.update();
-      },
-    );
+    this.bossProjectiles.forEach((projectile) => {
+      projectile.update();
+    });
 
-    if (
-      this.boss &&
-      this.boss.active
-    ) {
+    if (this.boss && this.boss.active) {
       this.boss.update(
         time,
         this.player.x,
@@ -236,33 +224,34 @@ export class GameScene extends Phaser.Scene {
   }
 
   private startStage() {
-    this.waveManager =
-      new WaveManager(
-        this,
-        this.currentStage,
+    this.waveManager = new WaveManager(
+      this,
+      this.currentStage,
 
-        (
-          x: number,
-          pattern: EnemyPattern,
-        ) => {
-          this.spawnEnemy(
-            x,
-            pattern,
-          );
-        },
+      (
+        x: number,
+        pattern: EnemyPattern,
+        type: EnemyType,
+      ) => {
+        this.spawnEnemy(
+          x,
+          pattern,
+          type,
+        );
+      },
 
-        (
-          waveNumber: number,
-        ) => {
-          this.uiManager.updateWave(
-            waveNumber,
-          );
-        },
+      (
+        waveNumber: number,
+      ) => {
+        this.uiManager.updateWave(
+          waveNumber,
+        );
+      },
 
-        () => {
-          this.handleWavesComplete();
-        },
-      );
+      () => {
+        this.handleWavesComplete();
+      },
+    );
 
     this.waveManager.start();
   }
@@ -377,6 +366,7 @@ export class GameScene extends Phaser.Scene {
   private spawnEnemy(
     x: number,
     pattern: EnemyPattern,
+    type: EnemyType,
   ) {
     if (
       this.isGameOver ||
@@ -392,6 +382,7 @@ export class GameScene extends Phaser.Scene {
         x,
         -16,
         pattern,
+        type,
       );
 
     this.enemies.push(
@@ -454,9 +445,7 @@ export class GameScene extends Phaser.Scene {
             enemy.destroy();
 
             this.statsManager.recordHit();
-
-            this.statsManager
-              .recordEnemyDefeated();
+            this.statsManager.recordEnemyDefeated();
 
             this.addScore(100);
           },
@@ -871,13 +860,10 @@ export class GameScene extends Phaser.Scene {
 
   private destroyBossHealthBar() {
     this.bossHealthBar?.destroy();
-
     this.bossHealthBarBackground?.destroy();
 
     this.bossHealthBar = undefined;
-
-    this.bossHealthBarBackground =
-      undefined;
+    this.bossHealthBarBackground = undefined;
   }
 
   private defeatBoss() {

@@ -6,3 +6,8 @@ export type BossAttackPattern =
   | "straight"
   | "triple"
   | "aimed";
+
+  export type EnemyType =
+  | "tomato"
+  | "fork"
+  | "grater";
