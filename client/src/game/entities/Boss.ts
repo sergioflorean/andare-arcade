@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import type { BossAttackPattern } from "../types";
 
 const BOSS_SPEED = 35;
-const BOSS_MAX_HEALTH = 20;
+const BOSS_MAX_HEALTH = 4;
 
 const LEFT_LIMIT = 32;
 const RIGHT_LIMIT = 192;

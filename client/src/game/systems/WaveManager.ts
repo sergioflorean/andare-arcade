@@ -22,7 +22,7 @@ type WaveChangeCallback = (
 
 type WavesCompleteCallback = () => void;
 
-const WAVE_DELAY = 1500;
+const WAVE_DELAY = 400;
 
 export class WaveManager {
   private scene: Phaser.Scene;
