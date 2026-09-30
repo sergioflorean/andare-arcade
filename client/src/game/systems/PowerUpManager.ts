@@ -10,11 +10,12 @@ import { createGarlicTexture } from "../entities/createGarlicTexture";
 
 import type { PowerUpType } from "../types";
 
-const POWER_UP_DROP_CHANCE = 0.12;
+const POWER_UP_DROP_CHANCE = 0.25;
 
 const RAPID_FIRE_DURATION = 5000;
 const SPREAD_SHOT_DURATION = 5000;
-const PARMESAN_DURATION = 5000;
+const PARMESAN_DURATION = 10000;
+const GARLIC_SHIELD_HITS = 3;
 
 const POWER_UP_TYPES: PowerUpType[] = [
   "salsa-rossa",
@@ -33,7 +34,8 @@ export class PowerUpManager {
   private spreadShotUntil = 0;
   private parmesanUntil = 0;
 
-  private shieldActive = false;
+  
+  private shieldHitsRemaining = 0;
   private shieldRing?: Phaser.GameObjects.Arc;
 
   constructor(scene: Phaser.Scene) {
@@ -94,7 +96,7 @@ export class PowerUpManager {
         break;
 
       case "garlic":
-        this.shieldActive = true;
+        this.shieldHitsRemaining = GARLIC_SHIELD_HITS;
         this.showShield();
         break;
     }
@@ -113,17 +115,22 @@ export class PowerUpManager {
   }
 
   isShieldActive() {
-    return this.shieldActive;
-  }
+  return this.shieldHitsRemaining > 0;
+}
 
-  consumeShield() {
-    if (!this.shieldActive) return false;
+consumeShield() {
+  if (this.shieldHitsRemaining <= 0) return false;
 
-    this.shieldActive = false;
+  this.shieldHitsRemaining -= 1;
+
+  if (this.shieldHitsRemaining === 0) {
     this.breakShield();
-
-    return true;
+  } else {
+    this.updateShieldVisual();
   }
+
+  return true;
+}
 
   getActivePowerUps() {
     return this.powerUps;
@@ -146,7 +153,7 @@ export class PowerUpManager {
     this.spreadShotUntil = 0;
     this.parmesanUntil = 0;
 
-    this.shieldActive = false;
+    this.shieldHitsRemaining = 0;
 
     this.clearShieldVisual();
   }
@@ -212,6 +219,19 @@ export class PowerUpManager {
       onComplete: () => flash.destroy(),
     });
   }
+
+  private updateShieldVisual() {
+  if (!this.shieldRing) return;
+
+  const alpha =
+    this.shieldHitsRemaining / GARLIC_SHIELD_HITS;
+
+  this.shieldRing.setStrokeStyle(
+    2,
+    0xf5e7c6,
+    alpha,
+  );
+}
 
   private clearShieldVisual() {
     this.shieldRing?.destroy();

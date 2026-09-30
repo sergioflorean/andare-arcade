@@ -222,7 +222,7 @@ export class ShootingManager {
       damage ===
       PARMESAN_DAMAGE
     ) {
-      projectile.setScale(1.4);
+      projectile.setScale(1.8);
     }
 
     this.projectileDamage.set(
