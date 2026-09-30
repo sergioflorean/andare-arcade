@@ -4,6 +4,7 @@ import { Player } from "../entities/Player";
 import { Enemy } from "../entities/Enemy";
 import { Boss } from "../entities/Boss";
 import { BossProjectile } from "../entities/BossProjectile";
+import { GraterProjectile } from "../entities/GraterProjectile";
 
 import { InputManager } from "../input/InputManager";
 import { WaveManager } from "../systems/WaveManager";
@@ -18,6 +19,7 @@ import { createSpaghettiShotTexture } from "../entities/createSpaghettiShotTextu
 import { createTomatoEnemyTexture } from "../entities/createTomatoEnemyTexture";
 import { createForkEnemyTexture } from "../entities/createForkEnemyTexture";
 import { createGraterEnemyTexture } from "../entities/createGraterEnemyTexture";
+import { createCheeseShardTexture } from "../entities/createCheeseShardTexture";
 import { createBossTexture } from "../entities/createBossTexture";
 import { createBossProjectileTexture } from "../entities/createBossProjectileTexture";
 
@@ -47,6 +49,7 @@ export class GameScene extends Phaser.Scene {
 
   private enemies: Enemy[] = [];
   private bossProjectiles: BossProjectile[] = [];
+  private graterProjectiles: GraterProjectile[] = [];
 
   private boss?: Boss;
 
@@ -88,6 +91,7 @@ export class GameScene extends Phaser.Scene {
 
     this.enemies = [];
     this.bossProjectiles = [];
+    this.graterProjectiles = [];
 
     this.boss = undefined;
 
@@ -109,6 +113,7 @@ export class GameScene extends Phaser.Scene {
     createTomatoEnemyTexture(this);
     createForkEnemyTexture(this);
     createGraterEnemyTexture(this);
+    createCheeseShardTexture(this);
 
     createBossTexture(this);
     createBossProjectileTexture(this);
@@ -180,11 +185,32 @@ export class GameScene extends Phaser.Scene {
       );
     }
 
-    this.enemies.forEach(
-      (enemy) => enemy.update(time),
-    );
+    this.enemies.forEach((enemy) => {
+      enemy.update(
+        time,
+        this.player.x,
+        this.player.y,
+        (
+          x: number,
+          y: number,
+          targetX: number,
+          targetY: number,
+        ) => {
+          this.spawnGraterProjectile(
+            x,
+            y,
+            targetX,
+            targetY,
+          );
+        },
+      );
+    });
 
     this.bossProjectiles.forEach(
+      (projectile) => projectile.update(),
+    );
+
+    this.graterProjectiles.forEach(
       (projectile) => projectile.update(),
     );
 
@@ -215,16 +241,20 @@ export class GameScene extends Phaser.Scene {
     this.checkProjectileBossCollisions();
     this.checkEnemyPlayerCollisions();
     this.checkBossProjectilePlayerCollisions();
+    this.checkGraterProjectilePlayerCollisions();
     this.checkPowerUpPlayerCollisions();
 
     this.enemies = this.enemies.filter(
       (enemy) => enemy.active,
     );
 
-    this.bossProjectiles =
-      this.bossProjectiles.filter(
-        (projectile) => projectile.active,
-      );
+    this.bossProjectiles = this.bossProjectiles.filter(
+      (projectile) => projectile.active,
+    );
+
+    this.graterProjectiles = this.graterProjectiles.filter(
+      (projectile) => projectile.active,
+    );
 
     this.waveManager.update(
       this.enemies.length,
@@ -295,8 +325,7 @@ export class GameScene extends Phaser.Scene {
     this.player.setVelocity(0, 0);
 
     const body =
-      this.player
-        .body as Phaser.Physics.Arcade.Body;
+      this.player.body as Phaser.Physics.Arcade.Body;
 
     body.enable = true;
 
@@ -335,11 +364,16 @@ export class GameScene extends Phaser.Scene {
       (projectile) => projectile.destroy(),
     );
 
+    this.graterProjectiles.forEach(
+      (projectile) => projectile.destroy(),
+    );
+
     this.shootingManager.clear();
     this.powerUpManager.clear();
 
     this.enemies = [];
     this.bossProjectiles = [];
+    this.graterProjectiles = [];
   }
 
   private spawnEnemy(
@@ -392,48 +426,69 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
+  private spawnGraterProjectile(
+    x: number,
+    y: number,
+    targetX: number,
+    targetY: number,
+  ) {
+    if (
+      this.isGameOver ||
+      this.isStageClear ||
+      this.isGameComplete
+    ) {
+      return;
+    }
+
+    this.graterProjectiles.push(
+      new GraterProjectile(
+        this,
+        x,
+        y,
+        targetX,
+        targetY,
+      ),
+    );
+  }
+
   private checkProjectileEnemyCollisions() {
     const projectiles =
       this.shootingManager.getProjectiles();
 
-    projectiles.forEach(
-      (projectile) => {
-        this.enemies.forEach(
-          (enemy) => {
-            if (
-              !projectile.active ||
-              !enemy.active
-            ) {
-              return;
-            }
+    projectiles.forEach((projectile) => {
+      this.enemies.forEach((enemy) => {
+        if (
+          !projectile.active ||
+          !enemy.active
+        ) {
+          return;
+        }
 
-            if (
-              !this.physics.overlap(
-                projectile,
-                enemy,
-              )
-            ) {
-              return;
-            }
+        if (
+          !this.physics.overlap(
+            projectile,
+            enemy,
+          )
+        ) {
+          return;
+        }
 
-            const { x, y } = enemy;
+        const { x, y } = enemy;
 
-            projectile.destroy();
-            enemy.destroy();
+        projectile.destroy();
+        enemy.destroy();
 
-            this.statsManager.recordHit();
-            this.statsManager.recordEnemyDefeated();
+        this.statsManager.recordHit();
+        this.statsManager.recordEnemyDefeated();
 
-            this.addScore(100);
+        this.addScore(100);
 
-            this.powerUpManager.trySpawn(
-              x,
-              y,
-            );
-          },
+        this.powerUpManager.trySpawn(
+          x,
+          y,
         );
-      },
-    );
+      });
+    });
   }
 
   private checkProjectileBossCollisions() {
@@ -447,41 +502,38 @@ export class GameScene extends Phaser.Scene {
     const projectiles =
       this.shootingManager.getProjectiles();
 
-    projectiles.forEach(
-      (projectile) => {
-        if (!projectile.active) return;
+    projectiles.forEach((projectile) => {
+      if (!projectile.active) return;
 
-        if (
-          !this.physics.overlap(
-            projectile,
-            this.boss!,
-          )
-        ) {
-          return;
-        }
+      if (
+        !this.physics.overlap(
+          projectile,
+          this.boss!,
+        )
+      ) {
+        return;
+      }
 
-        const damage =
-          this.shootingManager
-            .getProjectileDamage(
-              projectile,
-            );
+      const damage =
+        this.shootingManager.getProjectileDamage(
+          projectile,
+        );
 
-        projectile.destroy();
+      projectile.destroy();
 
-        this.statsManager.recordHit();
+      this.statsManager.recordHit();
 
-        const bossDefeated =
-          this.boss!.takeDamage(
-            damage,
-          );
+      const bossDefeated =
+        this.boss!.takeDamage(
+          damage,
+        );
 
-        this.updateBossHealthBar();
+      this.updateBossHealthBar();
 
-        if (bossDefeated) {
-          this.defeatBoss();
-        }
-      },
-    );
+      if (bossDefeated) {
+        this.defeatBoss();
+      }
+    });
   }
 
   private checkEnemyPlayerCollisions() {
@@ -492,23 +544,21 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    this.enemies.forEach(
-      (enemy) => {
-        if (!enemy.active) return;
+    this.enemies.forEach((enemy) => {
+      if (!enemy.active) return;
 
-        if (
-          !this.physics.overlap(
-            this.player,
-            enemy,
-          )
-        ) {
-          return;
-        }
+      if (
+        !this.physics.overlap(
+          this.player,
+          enemy,
+        )
+      ) {
+        return;
+      }
 
-        enemy.destroy();
-        this.damagePlayer();
-      },
-    );
+      enemy.destroy();
+      this.damagePlayer();
+    });
   }
 
   private checkBossProjectilePlayerCollisions() {
@@ -520,6 +570,33 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.bossProjectiles.forEach(
+      (projectile) => {
+        if (!projectile.active) return;
+
+        if (
+          !this.physics.overlap(
+            this.player,
+            projectile,
+          )
+        ) {
+          return;
+        }
+
+        projectile.destroy();
+        this.damagePlayer();
+      },
+    );
+  }
+
+  private checkGraterProjectilePlayerCollisions() {
+    if (
+      this.isPlayerInvulnerable ||
+      this.isPlayerRespawning
+    ) {
+      return;
+    }
+
+    this.graterProjectiles.forEach(
       (projectile) => {
         if (!projectile.active) return;
 
@@ -606,8 +683,7 @@ export class GameScene extends Phaser.Scene {
     this.player.setVisible(false);
 
     const body =
-      this.player
-        .body as Phaser.Physics.Arcade.Body;
+      this.player.body as Phaser.Physics.Arcade.Body;
 
     body.enable = false;
 
@@ -667,8 +743,7 @@ export class GameScene extends Phaser.Scene {
     this.player.setVisible(false);
 
     const body =
-      this.player
-        .body as Phaser.Physics.Arcade.Body;
+      this.player.body as Phaser.Physics.Arcade.Body;
 
     body.enable = false;
 
@@ -817,7 +892,12 @@ export class GameScene extends Phaser.Scene {
       (projectile) => projectile.destroy(),
     );
 
+    this.graterProjectiles.forEach(
+      (projectile) => projectile.destroy(),
+    );
+
     this.bossProjectiles = [];
+    this.graterProjectiles = [];
 
     this.destroyBossHealthBar();
 
@@ -838,8 +918,7 @@ export class GameScene extends Phaser.Scene {
     this.player.setVisible(false);
 
     const body =
-      this.player
-        .body as Phaser.Physics.Arcade.Body;
+      this.player.body as Phaser.Physics.Arcade.Body;
 
     body.enable = false;
 
@@ -868,8 +947,7 @@ export class GameScene extends Phaser.Scene {
     this.player.setVisible(false);
 
     const body =
-      this.player
-        .body as Phaser.Physics.Arcade.Body;
+      this.player.body as Phaser.Physics.Arcade.Body;
 
     body.enable = false;
 
@@ -878,11 +956,9 @@ export class GameScene extends Phaser.Scene {
       score:
         this.statsManager.getScore(),
       enemiesDefeated:
-        this.statsManager
-          .getEnemiesDefeated(),
+        this.statsManager.getEnemiesDefeated(),
       shotsFired:
-        this.statsManager
-          .getShotsFired(),
+        this.statsManager.getShotsFired(),
       hits:
         this.statsManager.getHits(),
       accuracy:
@@ -904,8 +980,7 @@ export class GameScene extends Phaser.Scene {
     this.player.setVisible(false);
 
     const body =
-      this.player
-        .body as Phaser.Physics.Arcade.Body;
+      this.player.body as Phaser.Physics.Arcade.Body;
 
     body.enable = false;
 
