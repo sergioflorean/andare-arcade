@@ -49,6 +49,10 @@ export class InputManager {
     );
   }
 
+  isFireHeld() {
+  return this.fireKey.isDown;
+}
+
   isStartPressed() {
     return Phaser.Input.Keyboard.JustDown(
       this.startKey,

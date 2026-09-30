@@ -228,18 +228,18 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
   }
 
   takeDamage(
-    amount: number = 1,
-  ) {
-    this.health -= amount;
+  damage = 1,
+) {
+  this.health -= damage;
 
-    if (this.health <= 0) {
-      this.health = 0;
+  if (this.health <= 0) {
+    this.health = 0;
 
-      return true;
-    }
-
-    return false;
+    return true;
   }
+
+  return false;
+}
 
   getHealth() {
     return this.health;
