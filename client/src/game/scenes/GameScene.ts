@@ -1,7 +1,6 @@
 import Phaser from "phaser";
 
 import { Player } from "../entities/Player";
-import { Projectile } from "../entities/Projectile";
 import { Enemy } from "../entities/Enemy";
 import { Boss } from "../entities/Boss";
 import { BossProjectile } from "../entities/BossProjectile";
@@ -9,6 +8,8 @@ import { BossProjectile } from "../entities/BossProjectile";
 import { InputManager } from "../input/InputManager";
 import { WaveManager } from "../systems/WaveManager";
 import { StatsManager } from "../systems/StatsManager";
+import { PowerUpManager } from "../systems/PowerUpManager";
+import { ShootingManager } from "../systems/ShootingManager";
 import { GameUI } from "../ui/GameUI";
 
 import { createClassicBoxTexture } from "../entities/createClassicBoxTexture";
@@ -38,9 +39,10 @@ export class GameScene extends Phaser.Scene {
   private inputManager!: InputManager;
   private waveManager!: WaveManager;
   private statsManager!: StatsManager;
+  private powerUpManager!: PowerUpManager;
+  private shootingManager!: ShootingManager;
   private uiManager!: GameUI;
 
-  private projectiles: Projectile[] = [];
   private enemies: Enemy[] = [];
   private bossProjectiles: BossProjectile[] = [];
 
@@ -69,12 +71,18 @@ export class GameScene extends Phaser.Scene {
     this.physics.resume();
 
     this.statsManager = new StatsManager();
+    this.powerUpManager = new PowerUpManager(this);
+
+    this.shootingManager = new ShootingManager(
+      this,
+      () => this.statsManager.recordShot(),
+    );
+
     this.uiManager = new GameUI(this);
 
     this.lives = 3;
     this.currentStage = 1;
 
-    this.projectiles = [];
     this.enemies = [];
     this.bossProjectiles = [];
 
@@ -109,6 +117,10 @@ export class GameScene extends Phaser.Scene {
       PLAYER_START_X,
       PLAYER_START_Y,
       this.inputManager,
+    );
+
+    this.powerUpManager.setPlayer(
+      this.player,
     );
 
     this.uiManager.createHud(
@@ -157,24 +169,27 @@ export class GameScene extends Phaser.Scene {
     if (!this.isPlayerRespawning) {
       this.player.update();
 
-      if (this.inputManager.isFirePressed()) {
-        this.shoot();
-      }
+      this.shootingManager.update(
+        time,
+        this.player,
+        this.inputManager,
+        this.powerUpManager.isRapidFireActive(),
+        this.powerUpManager.isSpreadShotActive(),
+        this.powerUpManager.isParmesanActive(),
+      );
     }
 
-    this.projectiles.forEach((projectile) => {
-      projectile.update();
-    });
+    this.enemies.forEach(
+      (enemy) => enemy.update(time),
+    );
 
-    this.enemies.forEach((enemy) => {
-      enemy.update(time);
-    });
+    this.bossProjectiles.forEach(
+      (projectile) => projectile.update(),
+    );
 
-    this.bossProjectiles.forEach((projectile) => {
-      projectile.update();
-    });
+    this.powerUpManager.update();
 
-    if (this.boss && this.boss.active) {
+    if (this.boss?.active) {
       this.boss.update(
         time,
         this.player.x,
@@ -199,23 +214,15 @@ export class GameScene extends Phaser.Scene {
     this.checkProjectileBossCollisions();
     this.checkEnemyPlayerCollisions();
     this.checkBossProjectilePlayerCollisions();
+    this.checkPowerUpPlayerCollisions();
 
-    this.projectiles =
-      this.projectiles.filter(
-        (projectile) =>
-          projectile.active,
-      );
-
-    this.enemies =
-      this.enemies.filter(
-        (enemy) =>
-          enemy.active,
-      );
+    this.enemies = this.enemies.filter(
+      (enemy) => enemy.active,
+    );
 
     this.bossProjectiles =
       this.bossProjectiles.filter(
-        (projectile) =>
-          projectile.active,
+        (projectile) => projectile.active,
       );
 
     this.waveManager.update(
@@ -240,9 +247,7 @@ export class GameScene extends Phaser.Scene {
         );
       },
 
-      (
-        waveNumber: number,
-      ) => {
+      (waveNumber: number) => {
         this.uiManager.updateWave(
           waveNumber,
         );
@@ -286,11 +291,7 @@ export class GameScene extends Phaser.Scene {
 
     this.player.setVisible(true);
     this.player.setAlpha(1);
-
-    this.player.setVelocity(
-      0,
-      0,
-    );
+    this.player.setVelocity(0, 0);
 
     const body =
       this.player
@@ -325,42 +326,20 @@ export class GameScene extends Phaser.Scene {
   }
 
   private clearStageObjects() {
-    this.projectiles.forEach(
-      (projectile) => {
-        projectile.destroy();
-      },
-    );
-
     this.enemies.forEach(
-      (enemy) => {
-        enemy.destroy();
-      },
+      (enemy) => enemy.destroy(),
     );
 
     this.bossProjectiles.forEach(
-      (projectile) => {
-        projectile.destroy();
-      },
+      (projectile) =>
+        projectile.destroy(),
     );
 
-    this.projectiles = [];
+    this.shootingManager.clear();
+    this.powerUpManager.clear();
+
     this.enemies = [];
     this.bossProjectiles = [];
-  }
-
-  private shoot() {
-    const projectile =
-      new Projectile(
-        this,
-        this.player.x,
-        this.player.y - 14,
-      );
-
-    this.projectiles.push(
-      projectile,
-    );
-
-    this.statsManager.recordShot();
   }
 
   private spawnEnemy(
@@ -376,17 +355,14 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const enemy =
+    this.enemies.push(
       new Enemy(
         this,
         x,
         -16,
         pattern,
         type,
-      );
-
-    this.enemies.push(
-      enemy,
+      ),
     );
   }
 
@@ -405,22 +381,22 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const projectile =
+    this.bossProjectiles.push(
       new BossProjectile(
         this,
         x,
         y,
         velocityX,
         velocityY,
-      );
-
-    this.bossProjectiles.push(
-      projectile,
+      ),
     );
   }
 
   private checkProjectileEnemyCollisions() {
-    this.projectiles.forEach(
+    const projectiles =
+      this.shootingManager.getProjectiles();
+
+    projectiles.forEach(
       (projectile) => {
         this.enemies.forEach(
           (enemy) => {
@@ -431,15 +407,16 @@ export class GameScene extends Phaser.Scene {
               return;
             }
 
-            const hit =
-              this.physics.overlap(
+            if (
+              !this.physics.overlap(
                 projectile,
                 enemy,
-              );
-
-            if (!hit) {
+              )
+            ) {
               return;
             }
+
+            const { x, y } = enemy;
 
             projectile.destroy();
             enemy.destroy();
@@ -448,6 +425,11 @@ export class GameScene extends Phaser.Scene {
             this.statsManager.recordEnemyDefeated();
 
             this.addScore(100);
+
+            this.powerUpManager.trySpawn(
+              x,
+              y,
+            );
           },
         );
       },
@@ -456,35 +438,42 @@ export class GameScene extends Phaser.Scene {
 
   private checkProjectileBossCollisions() {
     if (
-      !this.boss ||
-      !this.boss.active ||
+      !this.boss?.active ||
       !this.isBossActive
     ) {
       return;
     }
 
-    this.projectiles.forEach(
-      (projectile) => {
-        if (!projectile.active) {
-          return;
-        }
+    const projectiles =
+      this.shootingManager.getProjectiles();
 
-        const hit =
-          this.physics.overlap(
+    projectiles.forEach(
+      (projectile) => {
+        if (!projectile.active) return;
+
+        if (
+          !this.physics.overlap(
             projectile,
             this.boss!,
-          );
-
-        if (!hit) {
+          )
+        ) {
           return;
         }
+
+        const damage =
+          this.shootingManager
+            .getProjectileDamage(
+              projectile,
+            );
 
         projectile.destroy();
 
         this.statsManager.recordHit();
 
         const bossDefeated =
-          this.boss!.takeDamage();
+          this.boss!.takeDamage(
+            damage,
+          );
 
         this.updateBossHealthBar();
 
@@ -505,22 +494,18 @@ export class GameScene extends Phaser.Scene {
 
     this.enemies.forEach(
       (enemy) => {
-        if (!enemy.active) {
-          return;
-        }
+        if (!enemy.active) return;
 
-        const hit =
-          this.physics.overlap(
+        if (
+          !this.physics.overlap(
             this.player,
             enemy,
-          );
-
-        if (!hit) {
+          )
+        ) {
           return;
         }
 
         enemy.destroy();
-
         this.damagePlayer();
       },
     );
@@ -536,28 +521,64 @@ export class GameScene extends Phaser.Scene {
 
     this.bossProjectiles.forEach(
       (projectile) => {
-        if (!projectile.active) {
-          return;
-        }
+        if (!projectile.active) return;
 
-        const hit =
-          this.physics.overlap(
+        if (
+          !this.physics.overlap(
             this.player,
             projectile,
-          );
-
-        if (!hit) {
+          )
+        ) {
           return;
         }
 
         projectile.destroy();
-
         this.damagePlayer();
       },
     );
   }
 
+  private checkPowerUpPlayerCollisions() {
+    if (
+      this.isPlayerRespawning ||
+      this.isGameOver ||
+      this.isStageClear ||
+      this.isGameComplete
+    ) {
+      return;
+    }
+
+    this.powerUpManager
+      .getActivePowerUps()
+      .forEach((powerUp) => {
+        if (!powerUp.active) return;
+
+        if (
+          !this.physics.overlap(
+            this.player,
+            powerUp,
+          )
+        ) {
+          return;
+        }
+
+        this.powerUpManager.activatePowerUp(
+          powerUp.getPowerUpType(),
+        );
+
+        this.powerUpManager.removePowerUp(
+          powerUp,
+        );
+      });
+  }
+
   private damagePlayer() {
+    if (
+      this.powerUpManager.consumeShield()
+    ) {
+      return;
+    }
+
     this.createHitFlash(
       this.player.x,
       this.player.y,
@@ -571,7 +592,6 @@ export class GameScene extends Phaser.Scene {
 
     if (this.lives <= 0) {
       this.gameOver();
-
       return;
     }
 
@@ -582,11 +602,7 @@ export class GameScene extends Phaser.Scene {
     this.isPlayerInvulnerable = true;
     this.isPlayerRespawning = true;
 
-    this.player.setVelocity(
-      0,
-      0,
-    );
-
+    this.player.setVelocity(0, 0);
     this.player.setVisible(false);
 
     const body =
@@ -633,7 +649,6 @@ export class GameScene extends Phaser.Scene {
 
       onComplete: () => {
         this.player.setAlpha(1);
-
         this.isPlayerInvulnerable = false;
       },
     });
@@ -700,9 +715,7 @@ export class GameScene extends Phaser.Scene {
 
     this.time.delayedCall(
       150,
-      () => {
-        flash.destroy();
-      },
+      () => flash.destroy(),
     );
   }
 
@@ -715,11 +728,7 @@ export class GameScene extends Phaser.Scene {
 
     this.physics.pause();
 
-    this.player.setVelocity(
-      0,
-      0,
-    );
-
+    this.player.setVelocity(0, 0);
     this.player.setVisible(false);
 
     const body =
@@ -737,9 +746,7 @@ export class GameScene extends Phaser.Scene {
 
     this.uiManager.showGameOver(
       () => {
-        if (!this.isGameOver) {
-          return;
-        }
+        if (!this.isGameOver) return;
 
         this.showStageResults(
           "GAME OVER",
@@ -748,9 +755,7 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
-  private addScore(
-    points: number,
-  ) {
+  private addScore(points: number) {
     this.statsManager.addScore(
       points,
     );
@@ -799,12 +804,11 @@ export class GameScene extends Phaser.Scene {
       "BOSS",
     );
 
-    this.boss =
-      new Boss(
-        this,
-        112,
-        55,
-      );
+    this.boss = new Boss(
+      this,
+      112,
+      55,
+    );
 
     this.createBossHealthBar();
   }
@@ -860,6 +864,7 @@ export class GameScene extends Phaser.Scene {
 
   private destroyBossHealthBar() {
     this.bossHealthBar?.destroy();
+
     this.bossHealthBarBackground?.destroy();
 
     this.bossHealthBar = undefined;
@@ -867,9 +872,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private defeatBoss() {
-    if (!this.boss) {
-      return;
-    }
+    if (!this.boss) return;
 
     this.isBossActive = false;
 
@@ -877,9 +880,8 @@ export class GameScene extends Phaser.Scene {
     this.boss = undefined;
 
     this.bossProjectiles.forEach(
-      (projectile) => {
-        projectile.destroy();
-      },
+      (projectile) =>
+        projectile.destroy(),
     );
 
     this.bossProjectiles = [];
@@ -899,11 +901,7 @@ export class GameScene extends Phaser.Scene {
     this.isPlayerRespawning = false;
     this.isPlayerInvulnerable = false;
 
-    this.player.setVelocity(
-      0,
-      0,
-    );
-
+    this.player.setVelocity(0, 0);
     this.player.setVisible(false);
 
     const body =
@@ -912,20 +910,13 @@ export class GameScene extends Phaser.Scene {
 
     body.enable = false;
 
-    this.projectiles.forEach(
-      (projectile) => {
-        projectile.destroy();
-      },
-    );
-
-    this.projectiles = [];
+    this.shootingManager.clear();
+    this.powerUpManager.clear();
 
     this.uiManager.showStageClear(
       this.currentStage,
       () => {
-        if (!this.isStageClear) {
-          return;
-        }
+        if (!this.isStageClear) return;
 
         this.showStageResults(
           `STAGE ${this.currentStage
@@ -951,24 +942,18 @@ export class GameScene extends Phaser.Scene {
 
     this.uiManager.showResults({
       title,
-
       score:
         this.statsManager.getScore(),
-
       enemiesDefeated:
         this.statsManager
           .getEnemiesDefeated(),
-
       shotsFired:
         this.statsManager
           .getShotsFired(),
-
       hits:
         this.statsManager.getHits(),
-
       accuracy:
-        this.statsManager
-          .getAccuracy(),
+        this.statsManager.getAccuracy(),
     });
   }
 
@@ -979,11 +964,10 @@ export class GameScene extends Phaser.Scene {
     this.isStageClear = false;
     this.isGameComplete = true;
 
-    this.player.setVelocity(
-      0,
-      0,
-    );
+    this.shootingManager.clear();
+    this.powerUpManager.clear();
 
+    this.player.setVelocity(0, 0);
     this.player.setVisible(false);
 
     const body =

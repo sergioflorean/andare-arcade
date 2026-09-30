@@ -11,3 +11,10 @@ export type BossAttackPattern =
   | "tomato"
   | "fork"
   | "grater";
+
+  export type PowerUpType =
+  | "salsa-rossa"
+  | "pesto"
+  | "parmesan"
+  | "garlic";
+  
