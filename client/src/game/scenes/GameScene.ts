@@ -10,6 +10,7 @@ import { WaveManager } from "../systems/WaveManager";
 import { StatsManager } from "../systems/StatsManager";
 import { PowerUpManager } from "../systems/PowerUpManager";
 import { ShootingManager } from "../systems/ShootingManager";
+import { HitEffectManager } from "../systems/HitEffectManager";
 import { GameUI } from "../ui/GameUI";
 
 import { createClassicBoxTexture } from "../entities/createClassicBoxTexture";
@@ -41,6 +42,7 @@ export class GameScene extends Phaser.Scene {
   private statsManager!: StatsManager;
   private powerUpManager!: PowerUpManager;
   private shootingManager!: ShootingManager;
+  private hitEffectManager!: HitEffectManager;
   private uiManager!: GameUI;
 
   private enemies: Enemy[] = [];
@@ -78,6 +80,7 @@ export class GameScene extends Phaser.Scene {
       () => this.statsManager.recordShot(),
     );
 
+    this.hitEffectManager = new HitEffectManager(this);
     this.uiManager = new GameUI(this);
 
     this.lives = 3;
@@ -119,9 +122,7 @@ export class GameScene extends Phaser.Scene {
       this.inputManager,
     );
 
-    this.powerUpManager.setPlayer(
-      this.player,
-    );
+    this.powerUpManager.setPlayer(this.player);
 
     this.uiManager.createHud(
       this.statsManager.getScore(),
@@ -331,8 +332,7 @@ export class GameScene extends Phaser.Scene {
     );
 
     this.bossProjectiles.forEach(
-      (projectile) =>
-        projectile.destroy(),
+      (projectile) => projectile.destroy(),
     );
 
     this.shootingManager.clear();
@@ -579,7 +579,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    this.createHitFlash(
+    this.hitEffectManager.play(
       this.player.x,
       this.player.y,
     );
@@ -652,71 +652,6 @@ export class GameScene extends Phaser.Scene {
         this.isPlayerInvulnerable = false;
       },
     });
-  }
-
-  private createHitFlash(
-    x: number,
-    y: number,
-  ) {
-    const flash =
-      this.add.graphics();
-
-    flash.fillStyle(
-      0xf5e7c6,
-      1,
-    );
-
-    flash.fillRect(
-      x - 2,
-      y - 10,
-      4,
-      20,
-    );
-
-    flash.fillRect(
-      x - 10,
-      y - 2,
-      20,
-      4,
-    );
-
-    flash.fillStyle(
-      0xe84a32,
-      1,
-    );
-
-    flash.fillRect(
-      x - 6,
-      y - 6,
-      4,
-      4,
-    );
-
-    flash.fillRect(
-      x + 2,
-      y - 6,
-      4,
-      4,
-    );
-
-    flash.fillRect(
-      x - 6,
-      y + 2,
-      4,
-      4,
-    );
-
-    flash.fillRect(
-      x + 2,
-      y + 2,
-      4,
-      4,
-    );
-
-    this.time.delayedCall(
-      150,
-      () => flash.destroy(),
-    );
   }
 
   private gameOver() {
@@ -864,7 +799,6 @@ export class GameScene extends Phaser.Scene {
 
   private destroyBossHealthBar() {
     this.bossHealthBar?.destroy();
-
     this.bossHealthBarBackground?.destroy();
 
     this.bossHealthBar = undefined;
@@ -880,8 +814,7 @@ export class GameScene extends Phaser.Scene {
     this.boss = undefined;
 
     this.bossProjectiles.forEach(
-      (projectile) =>
-        projectile.destroy(),
+      (projectile) => projectile.destroy(),
     );
 
     this.bossProjectiles = [];
