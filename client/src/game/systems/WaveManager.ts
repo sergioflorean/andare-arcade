@@ -18,6 +18,7 @@ type SpawnEnemyCallback = (
   x: number,
   pattern: EnemyPattern,
   type: EnemyType,
+  speedMultiplier: number,
 ) => void;
 
 type WaveChangeCallback = (
@@ -27,6 +28,28 @@ type WaveChangeCallback = (
 type WavesCompleteCallback = () => void;
 
 const WAVE_DELAY = 500;
+
+const SCREEN_WIDTH = 224;
+const MIN_ENEMY_X = 24;
+const MAX_ENEMY_X = 200;
+
+const WAVE_OFFSETS = [
+  -12,
+  0,
+  12,
+];
+
+const STAGE_ONE_SPEEDS = [
+  1,
+  1.08,
+  1.15,
+];
+
+const STAGE_TWO_SPEEDS = [
+  1.15,
+  1.25,
+  1.35,
+];
 
 const STAGE_ONE_WAVES: Wave[] = [
   [
@@ -274,6 +297,7 @@ const STAGE_TWO_WAVES: Wave[] = [
 
 export class WaveManager {
   private scene: Phaser.Scene;
+  private stage: number;
 
   private waves: Wave[];
 
@@ -297,14 +321,12 @@ export class WaveManager {
   constructor(
     scene: Phaser.Scene,
     stage: number,
-    spawnEnemy:
-      SpawnEnemyCallback,
-    onWaveChange:
-      WaveChangeCallback,
-    onWavesComplete:
-      WavesCompleteCallback,
+    spawnEnemy: SpawnEnemyCallback,
+    onWaveChange: WaveChangeCallback,
+    onWavesComplete: WavesCompleteCallback,
   ) {
     this.scene = scene;
+    this.stage = stage;
 
     this.waves =
       this.getWavesForStage(stage);
@@ -334,22 +356,16 @@ export class WaveManager {
       return;
     }
 
-    if (
-      this.pendingSpawns > 0
-    ) {
+    if (this.pendingSpawns > 0) {
       return;
     }
 
-    if (
-      activeEnemies > 0
-    ) {
+    if (activeEnemies > 0) {
       return;
     }
 
     this.isWaveActive = false;
-
-    this.isWaitingForNextWave =
-      true;
+    this.isWaitingForNextWave = true;
 
     this.scene.time.delayedCall(
       WAVE_DELAY,
@@ -370,46 +386,111 @@ export class WaveManager {
       this.waves.length
     ) {
       this.completeWaves();
-
       return;
     }
 
-    const wave =
+    const baseWave =
       this.waves[
         this.currentWaveIndex
       ];
 
-    this.isWaveActive = true;
+    const wave =
+      this.createWaveVariation(
+        baseWave,
+      );
 
-    this.pendingSpawns =
-      wave.length;
+    const speedMultiplier =
+      this.getSpeedMultiplier();
+
+    this.isWaveActive = true;
+    this.pendingSpawns = wave.length;
 
     this.onWaveChange(
       this.currentWaveIndex + 1,
     );
 
-    wave.forEach(
-      (enemy) => {
-        this.scene.time.delayedCall(
-          enemy.delay,
-          () => {
-            this.spawnEnemy(
-              enemy.x,
-              enemy.pattern,
-              enemy.type,
-            );
+    wave.forEach((enemy) => {
+      this.scene.time.delayedCall(
+        enemy.delay,
+        () => {
+          this.spawnEnemy(
+            enemy.x,
+            enemy.pattern,
+            enemy.type,
+            speedMultiplier,
+          );
 
-            this.pendingSpawns -= 1;
-          },
+          this.pendingSpawns -= 1;
+        },
+      );
+    });
+  }
+
+  private createWaveVariation(
+    wave: Wave,
+  ): Wave {
+    const mirrored =
+      Math.random() < 0.5;
+
+    const offset =
+      Phaser.Utils.Array.GetRandom(
+        WAVE_OFFSETS,
+      );
+
+    return wave.map((enemy) => {
+      const mirroredX =
+        mirrored
+          ? SCREEN_WIDTH - enemy.x
+          : enemy.x;
+
+      const x =
+        Phaser.Math.Clamp(
+          mirroredX + offset,
+          MIN_ENEMY_X,
+          MAX_ENEMY_X,
         );
-      },
+
+      return {
+        ...enemy,
+        x,
+        pattern:
+          this.getPatternVariation(
+            enemy,
+          ),
+      };
+    });
+  }
+
+  private getPatternVariation(
+    enemy: WaveEnemy,
+  ): EnemyPattern {
+    if (
+      enemy.type !== "tomato" ||
+      Math.random() >= 0.3
+    ) {
+      return enemy.pattern;
+    }
+
+    return enemy.pattern === "straight"
+      ? "zigzag"
+      : "straight";
+  }
+
+  private getSpeedMultiplier() {
+    const speeds =
+      this.stage === 2
+        ? STAGE_TWO_SPEEDS
+        : STAGE_ONE_SPEEDS;
+
+    return (
+      speeds[
+        this.currentWaveIndex
+      ] ?? 1
     );
   }
 
   private completeWaves() {
-    if (
-      this.hasCompleted
-    ) {
+    if (this.hasCompleted) {
       return;
     }
 
@@ -422,9 +503,7 @@ export class WaveManager {
   private getWavesForStage(
     stage: number,
   ): Wave[] {
-    if (
-      stage === 2
-    ) {
+    if (stage === 2) {
       return STAGE_TWO_WAVES;
     }
 
