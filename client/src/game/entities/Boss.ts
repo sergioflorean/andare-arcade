@@ -1,17 +1,24 @@
 import Phaser from "phaser";
-import type { BossAttackPattern } from "../types";
 
-const BOSS_SPEED = 35;
-const BOSS_MAX_HEALTH = 4;
+import type {
+  BossAttackPattern,
+} from "../types";
 
-const LEFT_LIMIT = 32;
-const RIGHT_LIMIT = 192;
+const BOSS_SPEED = 30;
+const ENRAGED_BOSS_SPEED = 44;
 
-const NORMAL_ATTACK_COOLDOWN = 1000;
-const ENRAGED_ATTACK_COOLDOWN = 650;
+const BOSS_MAX_HEALTH = 12;
 
-const STRAIGHT_SHOT_SPEED = 105;
-const AIMED_SHOT_SPEED = 115;
+const LEFT_LIMIT = 34;
+const RIGHT_LIMIT = 190;
+
+const NORMAL_ATTACK_COOLDOWN = 950;
+const ENRAGED_ATTACK_COOLDOWN = 550;
+
+const STRAIGHT_SHOT_SPEED = 110;
+const AIMED_SHOT_SPEED = 125;
+
+const HIT_FLASH_DURATION = 70;
 
 type BossAttackCallback = (
   x: number,
@@ -25,11 +32,13 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
 
   private lastAttackTime = 0;
   private attackIndex = 0;
+  private movementDirection = 1;
 
   private attackPatterns: BossAttackPattern[] = [
     "straight",
     "triple",
     "aimed",
+    "triple",
   ];
 
   constructor(
@@ -47,9 +56,8 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
-    this.setVelocityX(
-      BOSS_SPEED,
-    );
+    this.setDepth(2);
+    this.setVelocityX(BOSS_SPEED);
   }
 
   update(
@@ -60,27 +68,19 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
   ) {
     this.updateMovement();
 
-    const attackCooldown =
-      this.getAttackCooldown();
-
-    const canAttack =
-      time - this.lastAttackTime >=
-      attackCooldown;
-
-    if (!canAttack) {
+    if (
+      time - this.lastAttackTime <
+      this.getAttackCooldown()
+    ) {
       return;
     }
 
     this.lastAttackTime = time;
 
     const pattern =
-      this.attackPatterns[
-        this.attackIndex
-      ];
+      this.attackPatterns[this.attackIndex];
 
-    if (!pattern) {
-      return;
-    }
+    if (!pattern) return;
 
     this.performAttack(
       pattern,
@@ -90,28 +90,26 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
     );
 
     this.attackIndex =
-      (
-        this.attackIndex + 1
-      ) %
+      (this.attackIndex + 1) %
       this.attackPatterns.length;
   }
 
   private updateMovement() {
-    if (
-      this.x >= RIGHT_LIMIT
-    ) {
-      this.setVelocityX(
-        -BOSS_SPEED,
-      );
+    if (this.x >= RIGHT_LIMIT) {
+      this.movementDirection = -1;
     }
 
-    if (
-      this.x <= LEFT_LIMIT
-    ) {
-      this.setVelocityX(
-        BOSS_SPEED,
-      );
+    if (this.x <= LEFT_LIMIT) {
+      this.movementDirection = 1;
     }
+
+    const speed = this.isEnraged()
+      ? ENRAGED_BOSS_SPEED
+      : BOSS_SPEED;
+
+    this.setVelocityX(
+      this.movementDirection * speed,
+    );
   }
 
   private performAttack(
@@ -121,7 +119,7 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
     attackCallback: BossAttackCallback,
   ) {
     const shotX = this.x;
-    const shotY = this.y + 20;
+    const shotY = this.y + 21;
 
     if (pattern === "straight") {
       attackCallback(
@@ -136,38 +134,36 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
 
     if (pattern === "triple") {
       attackCallback(
-        shotX,
+        shotX - 8,
         shotY,
-        -55,
-        95,
+        -58,
+        100,
       );
 
       attackCallback(
         shotX,
-        shotY,
+        shotY + 2,
         0,
-        105,
+        115,
       );
 
       attackCallback(
-        shotX,
+        shotX + 8,
         shotY,
-        55,
-        95,
+        58,
+        100,
       );
 
       return;
     }
 
-    if (pattern === "aimed") {
-      this.fireAimedShot(
-        shotX,
-        shotY,
-        targetX,
-        targetY,
-        attackCallback,
-      );
-    }
+    this.fireAimedShot(
+      shotX,
+      shotY,
+      targetX,
+      targetY,
+      attackCallback,
+    );
   }
 
   private fireAimedShot(
@@ -183,63 +179,67 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
     const directionY =
       targetY - startY;
 
-    const distance =
-      Math.sqrt(
-        directionX * directionX +
-        directionY * directionY,
-      );
+    const distance = Math.hypot(
+      directionX,
+      directionY,
+    );
 
-    if (distance === 0) {
-      return;
-    }
-
-    const velocityX =
-      (
-        directionX /
-        distance
-      ) *
-      AIMED_SHOT_SPEED;
-
-    const velocityY =
-      (
-        directionY /
-        distance
-      ) *
-      AIMED_SHOT_SPEED;
+    if (distance === 0) return;
 
     attackCallback(
       startX,
       startY,
-      velocityX,
-      velocityY,
+      (
+        directionX /
+        distance
+      ) * AIMED_SHOT_SPEED,
+      (
+        directionY /
+        distance
+      ) * AIMED_SHOT_SPEED,
     );
   }
 
   private getAttackCooldown() {
-    const isEnraged =
+    return this.isEnraged()
+      ? ENRAGED_ATTACK_COOLDOWN
+      : NORMAL_ATTACK_COOLDOWN;
+  }
+
+  private isEnraged() {
+    return (
       this.health <=
-      BOSS_MAX_HEALTH / 2;
-
-    if (isEnraged) {
-      return ENRAGED_ATTACK_COOLDOWN;
-    }
-
-    return NORMAL_ATTACK_COOLDOWN;
+      BOSS_MAX_HEALTH / 2
+    );
   }
 
   takeDamage(
-  damage = 1,
-) {
-  this.health -= damage;
+    damage = 1,
+  ) {
+    this.health = Math.max(
+      0,
+      this.health - damage,
+    );
 
-  if (this.health <= 0) {
-    this.health = 0;
+    this.flashHit();
 
-    return true;
+    return this.health === 0;
   }
 
-  return false;
-}
+  private flashHit() {
+    this.setTint(
+      0xffd8c8,
+    );
+
+    this.scene.time.delayedCall(
+      HIT_FLASH_DURATION,
+      () => {
+        if (this.active) {
+          this.clearTint();
+        }
+      },
+    );
+  }
 
   getHealth() {
     return this.health;

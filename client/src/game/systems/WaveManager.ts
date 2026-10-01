@@ -5,14 +5,15 @@ import type {
   EnemyType,
 } from "../types";
 
-interface WaveEnemy {
-  x: number;
-  pattern: EnemyPattern;
-  type: EnemyType;
-  delay: number;
-}
+import {
+  FINAL_WAVE_CLEAR_DELAY,
+  NEXT_WAVE_DELAY,
+  WAVES_PER_STAGE,
+  WAVE_ADVANCE_TIMEOUT,
+  getWaveDifficulty,
+} from "./waveConfig";
 
-type Wave = WaveEnemy[];
+import { generateWave } from "./WaveGenerator";
 
 type SpawnEnemyCallback = (
   x: number,
@@ -27,292 +28,16 @@ type WaveChangeCallback = (
 
 type WavesCompleteCallback = () => void;
 
-const WAVE_DELAY = 500;
-
-const SCREEN_WIDTH = 224;
-const MIN_ENEMY_X = 24;
-const MAX_ENEMY_X = 200;
-
-const WAVE_OFFSETS = [
-  -12,
-  0,
-  12,
-];
-
-const STAGE_ONE_SPEEDS = [
-  1,
-  1.08,
-  1.15,
-];
-
-const STAGE_TWO_SPEEDS = [
-  1.15,
-  1.25,
-  1.35,
-];
-
-const STAGE_ONE_WAVES: Wave[] = [
-  [
-    {
-      x: 40,
-      pattern: "straight",
-      type: "tomato",
-      delay: 0,
-    },
-    {
-      x: 76,
-      pattern: "zigzag",
-      type: "tomato",
-      delay: 450,
-    },
-    {
-      x: 112,
-      pattern: "straight",
-      type: "tomato",
-      delay: 900,
-    },
-    {
-      x: 148,
-      pattern: "zigzag",
-      type: "tomato",
-      delay: 1350,
-    },
-    {
-      x: 184,
-      pattern: "straight",
-      type: "tomato",
-      delay: 1800,
-    },
-  ],
-
-  [
-    {
-      x: 32,
-      pattern: "zigzag",
-      type: "tomato",
-      delay: 0,
-    },
-    {
-      x: 64,
-      pattern: "straight",
-      type: "fork",
-      delay: 300,
-    },
-    {
-      x: 96,
-      pattern: "zigzag",
-      type: "tomato",
-      delay: 600,
-    },
-    {
-      x: 128,
-      pattern: "straight",
-      type: "fork",
-      delay: 900,
-    },
-    {
-      x: 160,
-      pattern: "zigzag",
-      type: "tomato",
-      delay: 1200,
-    },
-    {
-      x: 192,
-      pattern: "straight",
-      type: "fork",
-      delay: 1500,
-    },
-  ],
-
-  [
-    {
-      x: 40,
-      pattern: "zigzag",
-      type: "grater",
-      delay: 0,
-    },
-    {
-      x: 72,
-      pattern: "zigzag",
-      type: "tomato",
-      delay: 250,
-    },
-    {
-      x: 104,
-      pattern: "straight",
-      type: "fork",
-      delay: 500,
-    },
-    {
-      x: 136,
-      pattern: "straight",
-      type: "tomato",
-      delay: 750,
-    },
-    {
-      x: 168,
-      pattern: "zigzag",
-      type: "grater",
-      delay: 1000,
-    },
-    {
-      x: 200,
-      pattern: "straight",
-      type: "fork",
-      delay: 1250,
-    },
-  ],
-];
-
-const STAGE_TWO_WAVES: Wave[] = [
-  [
-    {
-      x: 28,
-      pattern: "zigzag",
-      type: "grater",
-      delay: 0,
-    },
-    {
-      x: 60,
-      pattern: "zigzag",
-      type: "tomato",
-      delay: 250,
-    },
-    {
-      x: 92,
-      pattern: "straight",
-      type: "fork",
-      delay: 500,
-    },
-    {
-      x: 124,
-      pattern: "zigzag",
-      type: "grater",
-      delay: 750,
-    },
-    {
-      x: 156,
-      pattern: "straight",
-      type: "fork",
-      delay: 1000,
-    },
-    {
-      x: 188,
-      pattern: "zigzag",
-      type: "tomato",
-      delay: 1250,
-    },
-  ],
-
-  [
-    {
-      x: 32,
-      pattern: "zigzag",
-      type: "grater",
-      delay: 0,
-    },
-    {
-      x: 58,
-      pattern: "straight",
-      type: "fork",
-      delay: 200,
-    },
-    {
-      x: 84,
-      pattern: "zigzag",
-      type: "tomato",
-      delay: 400,
-    },
-    {
-      x: 110,
-      pattern: "zigzag",
-      type: "grater",
-      delay: 600,
-    },
-    {
-      x: 136,
-      pattern: "straight",
-      type: "fork",
-      delay: 800,
-    },
-    {
-      x: 162,
-      pattern: "zigzag",
-      type: "tomato",
-      delay: 1000,
-    },
-    {
-      x: 188,
-      pattern: "zigzag",
-      type: "grater",
-      delay: 1200,
-    },
-  ],
-
-  [
-    {
-      x: 24,
-      pattern: "zigzag",
-      type: "grater",
-      delay: 0,
-    },
-    {
-      x: 52,
-      pattern: "zigzag",
-      type: "grater",
-      delay: 180,
-    },
-    {
-      x: 80,
-      pattern: "straight",
-      type: "fork",
-      delay: 360,
-    },
-    {
-      x: 108,
-      pattern: "zigzag",
-      type: "tomato",
-      delay: 540,
-    },
-    {
-      x: 136,
-      pattern: "straight",
-      type: "fork",
-      delay: 720,
-    },
-    {
-      x: 164,
-      pattern: "zigzag",
-      type: "grater",
-      delay: 900,
-    },
-    {
-      x: 192,
-      pattern: "zigzag",
-      type: "tomato",
-      delay: 1080,
-    },
-  ],
-];
-
 export class WaveManager {
   private scene: Phaser.Scene;
   private stage: number;
+  private spawnEnemy: SpawnEnemyCallback;
+  private onWaveChange: WaveChangeCallback;
+  private onWavesComplete: WavesCompleteCallback;
 
-  private waves: Wave[];
-
-  private spawnEnemy:
-    SpawnEnemyCallback;
-
-  private onWaveChange:
-    WaveChangeCallback;
-
-  private onWavesComplete:
-    WavesCompleteCallback;
-
-  private currentWaveIndex = -1;
-
+  private currentWave = 0;
   private pendingSpawns = 0;
+  private clearDeadline = 0;
 
   private isWaveActive = false;
   private isWaitingForNextWave = false;
@@ -327,89 +52,72 @@ export class WaveManager {
   ) {
     this.scene = scene;
     this.stage = stage;
-
-    this.waves =
-      this.getWavesForStage(stage);
-
-    this.spawnEnemy =
-      spawnEnemy;
-
-    this.onWaveChange =
-      onWaveChange;
-
-    this.onWavesComplete =
-      onWavesComplete;
+    this.spawnEnemy = spawnEnemy;
+    this.onWaveChange = onWaveChange;
+    this.onWavesComplete = onWavesComplete;
   }
 
   start() {
     this.startNextWave();
   }
 
-  update(
-    activeEnemies: number,
-  ) {
+  update(activeEnemies: number) {
     if (
       this.hasCompleted ||
       !this.isWaveActive ||
-      this.isWaitingForNextWave
+      this.isWaitingForNextWave ||
+      this.pendingSpawns > 0
     ) {
       return;
     }
 
-    if (this.pendingSpawns > 0) {
+    const cleared = activeEnemies === 0;
+    const isFinalWave =
+      this.currentWave >= WAVES_PER_STAGE;
+
+    if (isFinalWave) {
+      if (cleared) {
+        this.finishCurrentWave();
+      }
+
       return;
     }
 
-    if (activeEnemies > 0) {
-      return;
+    if (!this.clearDeadline) {
+      this.clearDeadline =
+        this.scene.time.now +
+        WAVE_ADVANCE_TIMEOUT;
     }
 
-    this.isWaveActive = false;
-    this.isWaitingForNextWave = true;
-
-    this.scene.time.delayedCall(
-      WAVE_DELAY,
-      () => {
-        this.isWaitingForNextWave =
-          false;
-
-        this.startNextWave();
-      },
-    );
+    if (
+      cleared ||
+      this.scene.time.now >= this.clearDeadline
+    ) {
+      this.finishCurrentWave();
+    }
   }
 
   private startNextWave() {
-    this.currentWaveIndex += 1;
+    this.currentWave += 1;
+    this.clearDeadline = 0;
 
-    if (
-      this.currentWaveIndex >=
-      this.waves.length
-    ) {
-      this.completeWaves();
-      return;
-    }
-
-    const baseWave =
-      this.waves[
-        this.currentWaveIndex
-      ];
-
-    const wave =
-      this.createWaveVariation(
-        baseWave,
-      );
-
-    const speedMultiplier =
-      this.getSpeedMultiplier();
-
-    this.isWaveActive = true;
-    this.pendingSpawns = wave.length;
-
-    this.onWaveChange(
-      this.currentWaveIndex + 1,
+    const difficulty = getWaveDifficulty(
+      this.stage,
+      this.currentWave,
     );
 
-    wave.forEach((enemy) => {
+    const enemies = generateWave(
+      difficulty,
+      this.currentWave,
+      WAVES_PER_STAGE,
+    );
+
+    this.isWaveActive = true;
+    this.pendingSpawns = enemies.length;
+
+    this.onWaveChange(this.currentWave);
+
+    enemies.forEach((enemy) => {
       this.scene.time.delayedCall(
         enemy.delay,
         () => {
@@ -417,7 +125,7 @@ export class WaveManager {
             enemy.x,
             enemy.pattern,
             enemy.type,
-            speedMultiplier,
+            enemy.speedMultiplier,
           );
 
           this.pendingSpawns -= 1;
@@ -426,87 +134,44 @@ export class WaveManager {
     });
   }
 
-  private createWaveVariation(
-    wave: Wave,
-  ): Wave {
-    const mirrored =
-      Math.random() < 0.5;
+  private finishCurrentWave() {
+    this.isWaveActive = false;
+    this.clearDeadline = 0;
 
-    const offset =
-      Phaser.Utils.Array.GetRandom(
-        WAVE_OFFSETS,
+    if (
+      this.currentWave >=
+      WAVES_PER_STAGE
+    ) {
+      this.isWaitingForNextWave = true;
+
+      this.scene.time.delayedCall(
+        FINAL_WAVE_CLEAR_DELAY,
+        () => {
+          this.isWaitingForNextWave = false;
+          this.completeWaves();
+        },
       );
 
-    return wave.map((enemy) => {
-      const mirroredX =
-        mirrored
-          ? SCREEN_WIDTH - enemy.x
-          : enemy.x;
-
-      const x =
-        Phaser.Math.Clamp(
-          mirroredX + offset,
-          MIN_ENEMY_X,
-          MAX_ENEMY_X,
-        );
-
-      return {
-        ...enemy,
-        x,
-        pattern:
-          this.getPatternVariation(
-            enemy,
-          ),
-      };
-    });
-  }
-
-  private getPatternVariation(
-    enemy: WaveEnemy,
-  ): EnemyPattern {
-    if (
-      enemy.type !== "tomato" ||
-      Math.random() >= 0.3
-    ) {
-      return enemy.pattern;
+      return;
     }
 
-    return enemy.pattern === "straight"
-      ? "zigzag"
-      : "straight";
-  }
+    this.isWaitingForNextWave = true;
 
-  private getSpeedMultiplier() {
-    const speeds =
-      this.stage === 2
-        ? STAGE_TWO_SPEEDS
-        : STAGE_ONE_SPEEDS;
-
-    return (
-      speeds[
-        this.currentWaveIndex
-      ] ?? 1
+    this.scene.time.delayedCall(
+      NEXT_WAVE_DELAY,
+      () => {
+        this.isWaitingForNextWave = false;
+        this.startNextWave();
+      },
     );
   }
 
   private completeWaves() {
-    if (this.hasCompleted) {
-      return;
-    }
+    if (this.hasCompleted) return;
 
     this.hasCompleted = true;
     this.isWaveActive = false;
 
     this.onWavesComplete();
-  }
-
-  private getWavesForStage(
-    stage: number,
-  ): Wave[] {
-    if (stage === 2) {
-      return STAGE_TWO_WAVES;
-    }
-
-    return STAGE_ONE_WAVES;
   }
 }
