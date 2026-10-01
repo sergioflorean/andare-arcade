@@ -134,6 +134,8 @@ export class GameScene extends Phaser.Scene {
       this.lives,
     );
 
+    this.updateComboHud();
+
     this.startStage();
   }
 
@@ -170,6 +172,10 @@ export class GameScene extends Phaser.Scene {
       }
 
       return;
+    }
+
+    if (this.statsManager.updateCombo(time)) {
+      this.updateComboHud();
     }
 
     if (!this.isPlayerRespawning) {
@@ -237,7 +243,7 @@ export class GameScene extends Phaser.Scene {
       );
     }
 
-    this.checkProjectileEnemyCollisions();
+    this.checkProjectileEnemyCollisions(time);
     this.checkProjectileBossCollisions();
     this.checkEnemyPlayerCollisions();
     this.checkBossProjectilePlayerCollisions();
@@ -308,6 +314,7 @@ export class GameScene extends Phaser.Scene {
     this.isPlayerRespawning = false;
 
     this.statsManager.resetStageStats();
+    this.updateComboHud();
 
     this.clearStageObjects();
 
@@ -451,7 +458,9 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
-  private checkProjectileEnemyCollisions() {
+  private checkProjectileEnemyCollisions(
+    time: number,
+  ) {
     const projectiles =
       this.shootingManager.getProjectiles();
 
@@ -479,9 +488,12 @@ export class GameScene extends Phaser.Scene {
         enemy.destroy();
 
         this.statsManager.recordHit();
-        this.statsManager.recordEnemyDefeated();
+        this.statsManager.recordEnemyDefeated(
+          time,
+        );
 
-        this.addScore(100);
+        this.addComboScore(100);
+        this.updateComboHud();
 
         this.powerUpManager.trySpawn(
           x,
@@ -656,6 +668,9 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    this.statsManager.resetCombo();
+    this.updateComboHud();
+
     this.hitEffectManager.play(
       this.player.x,
       this.player.y,
@@ -772,6 +787,23 @@ export class GameScene extends Phaser.Scene {
 
     this.uiManager.updateScore(
       this.statsManager.getScore(),
+    );
+  }
+
+  private addComboScore(points: number) {
+    this.statsManager.addComboScore(
+      points,
+    );
+
+    this.uiManager.updateScore(
+      this.statsManager.getScore(),
+    );
+  }
+
+  private updateComboHud() {
+    this.uiManager.updateCombo(
+      this.statsManager.getCombo(),
+      this.statsManager.getMultiplier(),
     );
   }
 

@@ -20,6 +20,11 @@ export class GameUI {
   private waveText!: Phaser.GameObjects.Text;
   private livesText!: Phaser.GameObjects.Text;
 
+  private comboText!: Phaser.GameObjects.Text;
+  private multiplierText!: Phaser.GameObjects.Text;
+
+  private currentMultiplier = 1;
+
   private resultsContainer?: Phaser.GameObjects.Container;
   private resultsStartText?: Phaser.GameObjects.Text;
 
@@ -95,11 +100,41 @@ export class GameUI {
         },
       );
 
+    this.comboText =
+      this.scene.add
+        .text(
+          112,
+          20,
+          "COMBO 00",
+          {
+            fontFamily: "monospace",
+            fontSize: "7px",
+            color: "#f5e7c6",
+          },
+        )
+        .setOrigin(0.5);
+
+    this.multiplierText =
+      this.scene.add
+        .text(
+          112,
+          30,
+          "x1",
+          {
+            fontFamily: "monospace",
+            fontSize: "10px",
+            color: "#e84a32",
+          },
+        )
+        .setOrigin(0.5);
+
     this.hudContainer.add([
       oneUpText,
       this.scoreText,
       this.waveText,
       this.livesText,
+      this.comboText,
+      this.multiplierText,
     ]);
   }
 
@@ -125,6 +160,37 @@ export class GameUI {
         .toString()
         .padStart(2, "0")}`,
     );
+  }
+
+  updateCombo(
+    combo: number,
+    multiplier: number,
+  ) {
+    this.comboText.setText(
+      `COMBO ${combo
+        .toString()
+        .padStart(2, "0")}`,
+    );
+
+    this.multiplierText.setText(
+      `x${multiplier}`,
+    );
+
+    if (
+      multiplier >
+      this.currentMultiplier
+    ) {
+      this.scene.tweens.add({
+        targets:
+          this.multiplierText,
+        scale: 1.6,
+        duration: 100,
+        yoyo: true,
+      });
+    }
+
+    this.currentMultiplier =
+      multiplier;
   }
 
   setWaveLabel(label: string) {
