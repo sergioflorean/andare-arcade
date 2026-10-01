@@ -127,7 +127,9 @@ export class GameScene extends Phaser.Scene {
       this.inputManager,
     );
 
-    this.powerUpManager.setPlayer(this.player);
+    this.powerUpManager.setPlayer(
+      this.player,
+    );
 
     this.uiManager.createHud(
       this.statsManager.getScore(),
@@ -276,11 +278,13 @@ export class GameScene extends Phaser.Scene {
         x: number,
         pattern: EnemyPattern,
         type: EnemyType,
+        speedMultiplier: number,
       ) => {
         this.spawnEnemy(
           x,
           pattern,
           type,
+          speedMultiplier,
         );
       },
 
@@ -387,6 +391,7 @@ export class GameScene extends Phaser.Scene {
     x: number,
     pattern: EnemyPattern,
     type: EnemyType,
+    speedMultiplier: number,
   ) {
     if (
       this.isGameOver ||
@@ -403,6 +408,7 @@ export class GameScene extends Phaser.Scene {
         -16,
         pattern,
         type,
+        speedMultiplier,
       ),
     );
   }
@@ -484,10 +490,24 @@ export class GameScene extends Phaser.Scene {
 
         const { x, y } = enemy;
 
+        const damage =
+          this.shootingManager.getProjectileDamage(
+            projectile,
+          );
+
         projectile.destroy();
-        enemy.destroy();
 
         this.statsManager.recordHit();
+
+        const enemyDefeated =
+          enemy.takeDamage(
+            damage,
+          );
+
+        if (!enemyDefeated) {
+          return;
+        }
+
         this.statsManager.recordEnemyDefeated(
           time,
         );
