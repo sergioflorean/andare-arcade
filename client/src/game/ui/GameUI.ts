@@ -263,54 +263,38 @@ export class GameUI {
       );
   }
 
-  showBossWarning(
-    onComplete: CompleteCallback,
-  ) {
-    this.clearTransient();
+  showBossWarning(onComplete: CompleteCallback) {
+  this.clearTransient();
+  this.setWaveLabel("WARNING");
 
-    this.setWaveLabel(
-      "WARNING",
-    );
+  const warningText = this.scene.add
+    .text(112, 130, "WARNING", {
+      fontFamily: "monospace",
+      fontSize: "18px",
+      color: "#e84a32",
+    })
+    .setOrigin(0.5);
 
-    const warningText =
-      this.scene.add
-        .text(
-          112,
-          130,
-          "WARNING",
-          {
-            fontFamily: "monospace",
-            fontSize: "18px",
-            color: "#e84a32",
-          },
-        )
-        .setOrigin(0.5);
+  this.transientText = warningText;
 
-    this.transientText =
-      warningText;
+  this.scene.tweens.add({
+    targets: warningText,
+    alpha: 0,
+    duration: 300,
+    yoyo: true,
+    repeat: 4,
 
-    this.scene.tweens.add({
-      targets: warningText,
-      alpha: 0,
-      duration: 250,
-      yoyo: true,
-      repeat: 3,
+    onComplete: () => {
+      warningText.destroy();
 
-      onComplete: () => {
-        warningText.destroy();
+      if (this.transientText === warningText) {
+        this.transientText = undefined;
+      }
 
-        if (
-          this.transientText ===
-          warningText
-        ) {
-          this.transientText =
-            undefined;
-        }
-
-        onComplete();
-      },
-    });
-  }
+      this.scene.time.delayedCall(500, onComplete);
+    },
+  });
+}
 
   showGameOver(
     onComplete: CompleteCallback,

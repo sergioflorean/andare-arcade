@@ -1,61 +1,53 @@
 import Phaser from "phaser";
 
 export class InputManager {
-  private cursors: Phaser.Types.Input.Keyboard.CursorKeys;
-
-  private fireKey: Phaser.Input.Keyboard.Key;
-  private startKey: Phaser.Input.Keyboard.Key;
+  private keys: Record<
+    "left" | "right" | "up" | "down" | "fire" | "start",
+    Phaser.Input.Keyboard.Key
+  >;
 
   constructor(scene: Phaser.Scene) {
-    if (!scene.input.keyboard) {
-      throw new Error(
-        "Keyboard input is not available",
-      );
+    const keyboard = scene.input.keyboard;
+
+    if (!keyboard) {
+      throw new Error("Keyboard input is not available");
     }
 
-    this.cursors =
-      scene.input.keyboard.createCursorKeys();
-
-    this.fireKey =
-      scene.input.keyboard.addKey(
-        Phaser.Input.Keyboard.KeyCodes.SPACE,
-      );
-
-    this.startKey =
-      scene.input.keyboard.addKey(
-        Phaser.Input.Keyboard.KeyCodes.ENTER,
-      );
+    this.keys = keyboard.addKeys({
+      left: Phaser.Input.Keyboard.KeyCodes.A,
+      right: Phaser.Input.Keyboard.KeyCodes.D,
+      up: Phaser.Input.Keyboard.KeyCodes.W,
+      down: Phaser.Input.Keyboard.KeyCodes.S,
+      fire: Phaser.Input.Keyboard.KeyCodes.SPACE,
+      start: Phaser.Input.Keyboard.KeyCodes.ENTER,
+    }) as typeof this.keys;
   }
 
   isLeftPressed() {
-    return this.cursors.left.isDown;
+    return this.keys.left.isDown;
   }
 
   isRightPressed() {
-    return this.cursors.right.isDown;
+    return this.keys.right.isDown;
   }
 
   isUpPressed() {
-    return this.cursors.up.isDown;
+    return this.keys.up.isDown;
   }
 
   isDownPressed() {
-    return this.cursors.down.isDown;
+    return this.keys.down.isDown;
   }
 
   isFirePressed() {
-    return Phaser.Input.Keyboard.JustDown(
-      this.fireKey,
-    );
+    return Phaser.Input.Keyboard.JustDown(this.keys.fire);
   }
 
   isFireHeld() {
-  return this.fireKey.isDown;
-}
+    return this.keys.fire.isDown;
+  }
 
   isStartPressed() {
-    return Phaser.Input.Keyboard.JustDown(
-      this.startKey,
-    );
+    return Phaser.Input.Keyboard.JustDown(this.keys.start);
   }
 }
