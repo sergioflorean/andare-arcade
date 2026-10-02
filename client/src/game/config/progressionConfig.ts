@@ -27,13 +27,13 @@ const STAGE_ENEMY_CONFIG: Record<number, StageEnemyConfig> = {
       "pepper-grinder",
       "meatball",
       "pasta-pot",
-      "colander",
+      "rolling-pin",
     ],
     fixedCounts: {
       "pepper-grinder": 1,
       meatball: 2,
       "pasta-pot": 1,
-      colander: 2,
+      "rolling-pin": 1,
     },
   },
 };
@@ -78,6 +78,7 @@ export const getFixedEnemyCounts = (
   totalWaves: number,
 ): Partial<Record<EnemyType, number>> => {
   const config = getStageEnemyConfig(stage);
+
   const unlockedEnemies = getUnlockedEnemies(
     stage,
     wave,
