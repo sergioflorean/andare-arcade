@@ -22,13 +22,20 @@ const MAX_X = 200;
 
 export const generateWave = (
   difficulty: WaveDifficulty,
+  stage: number,
   wave: number,
   totalWaves: number,
 ): GeneratedWaveEnemy[] => {
-  const unlockedEnemies = getUnlockedEnemies(wave, totalWaves);
+  const unlockedEnemies = getUnlockedEnemies(
+    stage,
+    wave,
+    totalWaves,
+  );
+
   const types = generateEnemyTypes(
     difficulty,
     unlockedEnemies,
+    stage,
     wave,
     totalWaves,
   );
@@ -47,10 +54,16 @@ export const generateWave = (
 const generateEnemyTypes = (
   difficulty: WaveDifficulty,
   unlockedEnemies: EnemyType[],
+  stage: number,
   wave: number,
   totalWaves: number,
 ): EnemyType[] => {
-  const fixedCounts = getFixedEnemyCounts(wave, totalWaves);
+  const fixedCounts = getFixedEnemyCounts(
+    stage,
+    wave,
+    totalWaves,
+  );
+
   const fixedTypes = getFixedEnemyTypes(fixedCounts);
 
   const randomEnemies = unlockedEnemies.filter(
@@ -70,8 +83,17 @@ const generateEnemyTypes = (
     ),
   ];
 
-  ensureNewestUnlockedEnemy(types, unlockedEnemies, fixedCounts);
-  ensureMinimumSpecials(types, difficulty, randomEnemies);
+  ensureNewestUnlockedEnemy(
+    types,
+    unlockedEnemies,
+    fixedCounts,
+  );
+
+  ensureMinimumSpecials(
+    types,
+    difficulty,
+    randomEnemies,
+  );
 
   return Phaser.Utils.Array.Shuffle(types);
 };
@@ -84,13 +106,20 @@ const getFixedEnemyTypes = (
       Array.from({ length: count }, () => type),
     );
 
+const getBaseEnemy = (
+  unlockedEnemies: EnemyType[],
+): EnemyType => unlockedEnemies[0] ?? "tomato";
+
 const getEnemyType = (
   difficulty: WaveDifficulty,
   unlockedEnemies: EnemyType[],
 ): EnemyType => {
-  const weights = getSpecialWeights(difficulty, unlockedEnemies);
-  const roll = Math.random();
+  const weights = getSpecialWeights(
+    difficulty,
+    unlockedEnemies,
+  );
 
+  const roll = Math.random();
   let threshold = 0;
 
   for (const { type, chance } of weights) {
@@ -101,7 +130,7 @@ const getEnemyType = (
     }
   }
 
-  return "tomato";
+  return getBaseEnemy(unlockedEnemies);
 };
 
 const getSpecialWeights = (
@@ -141,7 +170,10 @@ const getSpecialType = (
   difficulty: WaveDifficulty,
   unlockedEnemies: EnemyType[],
 ): EnemyType => {
-  const weights = getSpecialWeights(difficulty, unlockedEnemies);
+  const weights = getSpecialWeights(
+    difficulty,
+    unlockedEnemies,
+  );
 
   const totalWeight = weights.reduce(
     (sum, item) => sum + item.chance,
@@ -149,7 +181,7 @@ const getSpecialType = (
   );
 
   if (weights.length === 0 || totalWeight <= 0) {
-    return "tomato";
+    return getBaseEnemy(unlockedEnemies);
   }
 
   let roll = Math.random() * totalWeight;
@@ -162,7 +194,8 @@ const getSpecialType = (
     }
   }
 
-  return weights[weights.length - 1]?.type ?? "tomato";
+  return weights[weights.length - 1]?.type ??
+    getBaseEnemy(unlockedEnemies);
 };
 
 const ensureNewestUnlockedEnemy = (
@@ -181,8 +214,9 @@ const ensureNewestUnlockedEnemy = (
     return;
   }
 
-  const tomatoIndex = types.indexOf("tomato");
-  const replaceIndex = tomatoIndex >= 0 ? tomatoIndex : 0;
+  const baseEnemy = getBaseEnemy(unlockedEnemies);
+  const baseIndex = types.indexOf(baseEnemy);
+  const replaceIndex = baseIndex >= 0 ? baseIndex : 0;
 
   types[replaceIndex] = newestEnemy;
 };
@@ -192,23 +226,25 @@ const ensureMinimumSpecials = (
   difficulty: WaveDifficulty,
   unlockedEnemies: EnemyType[],
 ) => {
+  const baseEnemy = getBaseEnemy(unlockedEnemies);
+
   let specialCount = types.filter(
-    (type) => type !== "tomato",
+    (type) => type !== baseEnemy,
   ).length;
 
   while (specialCount < difficulty.minSpecials) {
-    const tomatoIndex = types.indexOf("tomato");
+    const baseIndex = types.indexOf(baseEnemy);
 
-    if (tomatoIndex === -1) return;
+    if (baseIndex === -1) return;
 
     const specialType = getSpecialType(
       difficulty,
       unlockedEnemies,
     );
 
-    if (specialType === "tomato") return;
+    if (specialType === baseEnemy) return;
 
-    types[tomatoIndex] = specialType;
+    types[baseIndex] = specialType;
     specialCount += 1;
   }
 };
