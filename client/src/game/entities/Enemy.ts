@@ -11,6 +11,7 @@ const TEXTURE_KEYS: Record<EnemyType, string> = {
   ravioli: "ravioli-enemy",
   "pepper-grinder": "pepper-grinder-enemy",
   meatball: "meatball-enemy",
+  "pasta-pot": "pasta-pot",
 };
 
 const MAX_HEALTH: Record<EnemyType, number> = {
@@ -22,6 +23,7 @@ const MAX_HEALTH: Record<EnemyType, number> = {
   ravioli: 2,
   "pepper-grinder": 3,
   meatball: 3,
+  "pasta-pot": 4,
 };
 
 const VERTICAL_SPEEDS: Record<EnemyType, number> = {
@@ -33,6 +35,7 @@ const VERTICAL_SPEEDS: Record<EnemyType, number> = {
   ravioli: 42,
   "pepper-grinder": 32,
   meatball: 18,
+  "pasta-pot": 24,
 };
 
 const ZIGZAG_SPEEDS: Record<EnemyType, number> = {
@@ -44,6 +47,7 @@ const ZIGZAG_SPEEDS: Record<EnemyType, number> = {
   ravioli: 38,
   "pepper-grinder": 40,
   meatball: 40,
+  "pasta-pot": 30,
 };
 
 const FORK_DIVE_TRIGGER_Y = 70;
@@ -111,11 +115,23 @@ const MEATBALL_ORBIT_SPEED = 1.1;
 const MEATBALL_DOWN_SPEED = 18;
 const MEATBALL_HIT_TINT = 0xffd3b5;
 
+const PASTA_POT_SCALE = 1.15;
+const PASTA_POT_ROAM_Y = 72;
+const PASTA_POT_HORIZONTAL_SPEED = 28;
+const PASTA_POT_MIN_X = 28;
+const PASTA_POT_MAX_X = 196;
+const PASTA_POT_FIRST_POUR_DELAY = 700;
+const PASTA_POT_POUR_INTERVAL = 2200;
+const PASTA_POT_TELEGRAPH_DURATION = 500;
+const PASTA_POT_TELEGRAPH_TINT = 0x71d5ef;
+const PASTA_POT_HIT_TINT = 0xe7f2f4;
+
 type ForkState = "approach" | "telegraph" | "dive";
 type GraterState = "approach" | "telegraph" | "roam" | "retreat";
 type ColanderState = "approach" | "roam" | "telegraph";
 type RavioliState = "armored" | "broken" | "telegraph" | "charge";
 type PepperGrinderState = "approach" | "roam" | "telegraph";
+type PastaPotState = "approach" | "roam" | "telegraph";
 
 type GraterShootCallback = (
   x: number,
@@ -124,13 +140,21 @@ type GraterShootCallback = (
   targetY: number,
 ) => void;
 
-type ColanderShootCallback = (x: number, y: number) => void;
+type ColanderShootCallback = (
+  x: number,
+  y: number,
+) => void;
 
 type PepperShootCallback = (
   x: number,
   y: number,
   velocityX: number,
   velocityY: number,
+) => void;
+
+type PastaPotPourCallback = (
+  x: number,
+  y: number,
 ) => void;
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
@@ -163,7 +187,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private pepperGrinderState: PepperGrinderState = "approach";
   private pepperAttackAt = 0;
   private pepperTelegraphEndsAt = 0;
-  private pepperDirection: -1 | 1 = Math.random() < 0.5 ? -1 : 1;
+  private pepperDirection: -1 | 1 =
+    Math.random() < 0.5 ? -1 : 1;
+
+  private pastaPotState: PastaPotState = "approach";
+  private pastaPotPourAt = 0;
+  private pastaPotTelegraphEndsAt = 0;
+  private pastaPotDirection: -1 | 1 =
+    Math.random() < 0.5 ? -1 : 1;
 
   private targetX = 0;
   private targetY = 0;
@@ -182,7 +213,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.enemyType = type;
     this.health = MAX_HEALTH[type];
     this.speedMultiplier = speedMultiplier;
-    this.zigzagPhase = Phaser.Math.FloatBetween(0, Math.PI * 2);
+    this.zigzagPhase = Phaser.Math.FloatBetween(
+      0,
+      Math.PI * 2,
+    );
 
     scene.add.existing(this);
     scene.physics.add.existing(this);
@@ -190,16 +224,22 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (type === "grater") this.setScale(GRATER_SCALE);
     if (type === "colander") this.setScale(COLANDER_SCALE);
     if (type === "ravioli") this.setScale(RAVIOLI_SCALE);
-    if (type === "pepper-grinder") this.setScale(PEPPER_GRINDER_SCALE);
+    if (type === "pepper-grinder") {
+      this.setScale(PEPPER_GRINDER_SCALE);
+    }
     if (type === "meatball") this.setScale(MEATBALL_SCALE);
+    if (type === "pasta-pot") this.setScale(PASTA_POT_SCALE);
 
     this.once("destroy", () => {
       this.scene.tweens.killTweensOf(this);
+
       this.graterDamageSmoke?.destroy();
       this.graterDamageSmoke = undefined;
     });
 
-    this.setVelocityY(VERTICAL_SPEEDS[type] * speedMultiplier);
+    this.setVelocityY(
+      VERTICAL_SPEEDS[type] * speedMultiplier,
+    );
   }
 
   update(
@@ -209,37 +249,70 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     onGraterShoot?: GraterShootCallback,
     onColanderShoot?: ColanderShootCallback,
     onPepperShoot?: PepperShootCallback,
+    onPastaPotPour?: PastaPotPourCallback,
   ) {
     if (this.enemyType === "ravioli") {
       this.updateRavioli(time);
     } else if (this.enemyType === "meatball") {
       this.updateMeatball(time);
-    } else if (this.enemyType === "pepper-grinder" && onPepperShoot) {
-      this.updatePepperGrinder(time, onPepperShoot);
+    } else if (
+      this.enemyType === "pasta-pot" &&
+      onPastaPotPour
+    ) {
+      this.updatePastaPot(
+        time,
+        onPastaPotPour,
+      );
+    } else if (
+      this.enemyType === "pepper-grinder" &&
+      onPepperShoot
+    ) {
+      this.updatePepperGrinder(
+        time,
+        onPepperShoot,
+      );
     } else if (this.enemyType === "basil") {
       this.updateBasil(time);
-    } else if (this.enemyType === "colander" && onColanderShoot) {
-      this.updateColander(time, onColanderShoot);
+    } else if (
+      this.enemyType === "colander" &&
+      onColanderShoot
+    ) {
+      this.updateColander(
+        time,
+        onColanderShoot,
+      );
     } else if (
       this.enemyType === "fork" &&
       playerX !== undefined &&
       playerY !== undefined
     ) {
-      this.updateFork(time, playerX, playerY);
+      this.updateFork(
+        time,
+        playerX,
+        playerY,
+      );
     } else if (
       this.enemyType === "grater" &&
       playerX !== undefined &&
       playerY !== undefined &&
       onGraterShoot
     ) {
-      this.updateGrater(time, playerX, playerY, onGraterShoot);
+      this.updateGrater(
+        time,
+        playerX,
+        playerY,
+        onGraterShoot,
+      );
     } else {
       this.updateNormalMovement(time);
     }
 
     this.updateDamageVisual();
 
-    if (this.y - this.height > this.scene.scale.height) {
+    if (
+      this.y - this.height >
+      this.scene.scale.height
+    ) {
       this.destroy();
     }
   }
@@ -279,12 +352,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.flashMeatballHit();
     }
 
+    if (this.enemyType === "pasta-pot") {
+      this.flashPastaPotHit();
+    }
+
     return false;
   }
 
   private updateNormalMovement(time: number) {
     this.setVelocityY(
-      VERTICAL_SPEEDS[this.enemyType] * this.speedMultiplier,
+      VERTICAL_SPEEDS[this.enemyType] *
+        this.speedMultiplier,
     );
 
     if (this.pattern === "straight") {
@@ -292,7 +370,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
-    const direction = Math.sin(time / 250 + this.zigzagPhase);
+    const direction = Math.sin(
+      time / 250 +
+        this.zigzagPhase,
+    );
 
     this.setVelocityX(
       direction *
@@ -309,24 +390,36 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     if (this.ravioliState === "broken") {
       this.ravioliState = "telegraph";
-      this.ravioliChargeAt = time + RAVIOLI_TELEGRAPH_DURATION;
+
+      this.ravioliChargeAt =
+        time +
+        RAVIOLI_TELEGRAPH_DURATION;
 
       this.setVelocity(0, 0);
-      this.setTint(RAVIOLI_TELEGRAPH_TINT);
+      this.setTint(
+        RAVIOLI_TELEGRAPH_TINT,
+      );
+
       return;
     }
 
     if (this.ravioliState === "telegraph") {
       this.setVelocity(0, 0);
 
-      if (time < this.ravioliChargeAt) return;
+      if (
+        time <
+        this.ravioliChargeAt
+      ) {
+        return;
+      }
 
       this.clearTint();
       this.setRotation(0);
 
       this.setVelocity(
         0,
-        RAVIOLI_CHARGE_SPEED * this.speedMultiplier,
+        RAVIOLI_CHARGE_SPEED *
+          this.speedMultiplier,
       );
 
       this.ravioliState = "charge";
@@ -338,26 +431,35 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   private breakRavioliArmor() {
     this.ravioliState = "broken";
-    this.setTexture(RAVIOLI_CRACKED_TEXTURE);
+    this.setTexture(
+      RAVIOLI_CRACKED_TEXTURE,
+    );
     this.setVelocity(0, 0);
 
     this.scene.tweens.add({
       targets: this,
-      scaleX: RAVIOLI_SCALE * 1.12,
-      scaleY: RAVIOLI_SCALE * 1.12,
+      scaleX:
+        RAVIOLI_SCALE * 1.12,
+      scaleY:
+        RAVIOLI_SCALE * 1.12,
       duration: 70,
       yoyo: true,
     });
   }
 
   private destroyRavioliOutsideScreen() {
-    const margin = RAVIOLI_OUT_OF_BOUNDS_MARGIN;
+    const margin =
+      RAVIOLI_OUT_OF_BOUNDS_MARGIN;
 
     if (
       this.x < -margin ||
-      this.x > this.scene.scale.width + margin ||
+      this.x >
+        this.scene.scale.width +
+          margin ||
       this.y < -margin ||
-      this.y > this.scene.scale.height + margin
+      this.y >
+        this.scene.scale.height +
+          margin
     ) {
       this.destroy();
     }
@@ -365,7 +467,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   private updateMeatball(time: number) {
     const angle =
-      time * 0.001 * MEATBALL_ORBIT_SPEED * this.speedMultiplier +
+      time *
+        0.001 *
+        MEATBALL_ORBIT_SPEED *
+        this.speedMultiplier +
       this.zigzagPhase;
 
     const orbitVelocity =
@@ -374,13 +479,19 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.speedMultiplier;
 
     const velocityX =
-      Math.cos(angle) * orbitVelocity;
+      Math.cos(angle) *
+      orbitVelocity;
 
     const velocityY =
-      MEATBALL_DOWN_SPEED * this.speedMultiplier +
-      Math.sin(angle) * orbitVelocity;
+      MEATBALL_DOWN_SPEED *
+        this.speedMultiplier +
+      Math.sin(angle) *
+        orbitVelocity;
 
-    this.setVelocity(velocityX, velocityY);
+    this.setVelocity(
+      velocityX,
+      velocityY,
+    );
 
     this.setAngle(
       Math.sin(angle) * 14,
@@ -388,80 +499,283 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   private flashMeatballHit() {
-    this.setTint(MEATBALL_HIT_TINT);
+    this.setTint(
+      MEATBALL_HIT_TINT,
+    );
 
-    this.scene.time.delayedCall(70, () => {
-      if (this.active) {
-        this.clearTint();
+    this.scene.time.delayedCall(
+      70,
+      () => {
+        if (this.active) {
+          this.clearTint();
+        }
+      },
+    );
+  }
+
+  private updatePastaPot(
+    time: number,
+    onPour: PastaPotPourCallback,
+  ) {
+    if (
+      this.pastaPotState ===
+      "approach"
+    ) {
+      this.updatePastaPotMovement(
+        VERTICAL_SPEEDS["pasta-pot"],
+      );
+
+      if (
+        this.y <
+        PASTA_POT_ROAM_Y
+      ) {
+        return;
       }
+
+      this.setY(PASTA_POT_ROAM_Y);
+
+      this.pastaPotState = "roam";
+
+      this.pastaPotPourAt =
+        time +
+        PASTA_POT_FIRST_POUR_DELAY;
+
+      return;
+    }
+
+    if (
+      this.pastaPotState ===
+      "telegraph"
+    ) {
+      this.setVelocity(0, 0);
+
+      if (
+        time <
+        this.pastaPotTelegraphEndsAt
+      ) {
+        return;
+      }
+
+      this.scene.tweens.killTweensOf(
+        this,
+      );
+
+      this.setAngle(0);
+      this.setScale(
+        PASTA_POT_SCALE,
+      );
+      this.clearTint();
+
+      onPour(
+        this.x,
+        this.y + 8,
+      );
+
+      this.pastaPotState = "roam";
+
+      this.pastaPotPourAt =
+        time +
+        PASTA_POT_POUR_INTERVAL;
+
+      return;
+    }
+
+    this.updatePastaPotMovement(0);
+
+    if (
+      time <
+      this.pastaPotPourAt
+    ) {
+      return;
+    }
+
+    this.pastaPotState =
+      "telegraph";
+
+    this.pastaPotTelegraphEndsAt =
+      time +
+      PASTA_POT_TELEGRAPH_DURATION;
+
+    this.setVelocity(0, 0);
+
+    this.setTint(
+      PASTA_POT_TELEGRAPH_TINT,
+    );
+
+    this.setAngle(-5);
+
+    this.scene.tweens.add({
+      targets: this,
+      angle: 5,
+      scaleX:
+        PASTA_POT_SCALE * 1.08,
+      scaleY:
+        PASTA_POT_SCALE * 1.08,
+      duration: 80,
+      yoyo: true,
+      repeat: 2,
     });
+  }
+
+  private updatePastaPotMovement(
+    verticalSpeed: number,
+  ) {
+    if (
+      this.x <= PASTA_POT_MIN_X &&
+      this.pastaPotDirection < 0
+    ) {
+      this.pastaPotDirection = 1;
+    }
+
+    if (
+      this.x >= PASTA_POT_MAX_X &&
+      this.pastaPotDirection > 0
+    ) {
+      this.pastaPotDirection = -1;
+    }
+
+    this.setVelocity(
+      this.pastaPotDirection *
+        PASTA_POT_HORIZONTAL_SPEED *
+        this.speedMultiplier,
+      verticalSpeed *
+        this.speedMultiplier,
+    );
+  }
+
+  private flashPastaPotHit() {
+    if (
+      this.pastaPotState ===
+      "telegraph"
+    ) {
+      return;
+    }
+
+    this.setTint(
+      PASTA_POT_HIT_TINT,
+    );
+
+    this.scene.time.delayedCall(
+      80,
+      () => {
+        if (
+          this.active &&
+          this.pastaPotState !==
+            "telegraph"
+        ) {
+          this.clearTint();
+        }
+      },
+    );
   }
 
   private updatePepperGrinder(
     time: number,
     onShoot: PepperShootCallback,
   ) {
-    if (this.pepperGrinderState === "approach") {
+    if (
+      this.pepperGrinderState ===
+      "approach"
+    ) {
       this.updatePepperGrinderMovement(
-        VERTICAL_SPEEDS["pepper-grinder"],
+        VERTICAL_SPEEDS[
+          "pepper-grinder"
+        ],
       );
 
-      if (this.y < PEPPER_GRINDER_ROAM_Y) {
+      if (
+        this.y <
+        PEPPER_GRINDER_ROAM_Y
+      ) {
         return;
       }
 
-      this.setY(PEPPER_GRINDER_ROAM_Y);
-      this.pepperGrinderState = "roam";
+      this.setY(
+        PEPPER_GRINDER_ROAM_Y,
+      );
+
+      this.pepperGrinderState =
+        "roam";
 
       this.pepperAttackAt =
-        time + PEPPER_GRINDER_FIRST_ATTACK_DELAY;
+        time +
+        PEPPER_GRINDER_FIRST_ATTACK_DELAY;
 
       return;
     }
 
-    if (this.pepperGrinderState === "telegraph") {
+    if (
+      this.pepperGrinderState ===
+      "telegraph"
+    ) {
       this.setVelocity(0, 0);
 
-      if (time < this.pepperTelegraphEndsAt) {
+      if (
+        time <
+        this.pepperTelegraphEndsAt
+      ) {
         return;
       }
 
-      this.scene.tweens.killTweensOf(this);
+      this.scene.tweens.killTweensOf(
+        this,
+      );
 
       this.setAngle(0);
-      this.setScale(PEPPER_GRINDER_SCALE);
+      this.setScale(
+        PEPPER_GRINDER_SCALE,
+      );
       this.clearTint();
 
-      this.firePepperSprinkle(onShoot);
+      this.firePepperSprinkle(
+        onShoot,
+      );
 
-      this.pepperGrinderState = "roam";
+      this.pepperGrinderState =
+        "roam";
 
       this.pepperAttackAt =
-        time + PEPPER_GRINDER_ATTACK_INTERVAL;
+        time +
+        PEPPER_GRINDER_ATTACK_INTERVAL;
 
       return;
     }
 
-    this.updatePepperGrinderMovement(0);
+    this.updatePepperGrinderMovement(
+      0,
+    );
 
-    if (time < this.pepperAttackAt) {
+    if (
+      time <
+      this.pepperAttackAt
+    ) {
       return;
     }
 
-    this.pepperGrinderState = "telegraph";
+    this.pepperGrinderState =
+      "telegraph";
 
     this.pepperTelegraphEndsAt =
-      time + PEPPER_GRINDER_TELEGRAPH_DURATION;
+      time +
+      PEPPER_GRINDER_TELEGRAPH_DURATION;
 
     this.setVelocity(0, 0);
-    this.setTint(PEPPER_GRINDER_TELEGRAPH_TINT);
+
+    this.setTint(
+      PEPPER_GRINDER_TELEGRAPH_TINT,
+    );
+
     this.setAngle(-8);
 
     this.scene.tweens.add({
       targets: this,
       angle: 8,
-      scaleX: PEPPER_GRINDER_SCALE * 1.12,
-      scaleY: PEPPER_GRINDER_SCALE * 1.12,
+      scaleX:
+        PEPPER_GRINDER_SCALE *
+        1.12,
+      scaleY:
+        PEPPER_GRINDER_SCALE *
+        1.12,
       duration: 55,
       yoyo: true,
       repeat: 2,
@@ -471,7 +785,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private firePepperSprinkle(
     onShoot: PepperShootCallback,
   ) {
-    for (let i = 0; i < PEPPER_PROJECTILE_COUNT; i += 1) {
+    for (
+      let i = 0;
+      i <
+      PEPPER_PROJECTILE_COUNT;
+      i += 1
+    ) {
       this.scene.time.delayedCall(
         i * PEPPER_BURST_DELAY,
         () => {
@@ -486,7 +805,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
           const spawnY =
             this.y +
-            Phaser.Math.Between(8, 12);
+            Phaser.Math.Between(
+              8,
+              12,
+            );
 
           const velocityX =
             Phaser.Math.Between(
@@ -515,14 +837,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     verticalSpeed: number,
   ) {
     if (
-      this.x <= PEPPER_GRINDER_MIN_X &&
+      this.x <=
+        PEPPER_GRINDER_MIN_X &&
       this.pepperDirection < 0
     ) {
       this.pepperDirection = 1;
     }
 
     if (
-      this.x >= PEPPER_GRINDER_MAX_X &&
+      this.x >=
+        PEPPER_GRINDER_MAX_X &&
       this.pepperDirection > 0
     ) {
       this.pepperDirection = -1;
@@ -532,44 +856,66 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.pepperDirection *
         PEPPER_GRINDER_HORIZONTAL_SPEED *
         this.speedMultiplier,
-      verticalSpeed * this.speedMultiplier,
+      verticalSpeed *
+        this.speedMultiplier,
     );
   }
 
   private flashPepperGrinderHit() {
-    if (this.pepperGrinderState === "telegraph") {
+    if (
+      this.pepperGrinderState ===
+      "telegraph"
+    ) {
       return;
     }
 
-    this.setTint(PEPPER_GRINDER_HIT_TINT);
+    this.setTint(
+      PEPPER_GRINDER_HIT_TINT,
+    );
 
-    this.scene.time.delayedCall(80, () => {
-      if (
-        this.active &&
-        this.pepperGrinderState !== "telegraph"
-      ) {
-        this.clearTint();
-      }
-    });
+    this.scene.time.delayedCall(
+      80,
+      () => {
+        if (
+          this.active &&
+          this.pepperGrinderState !==
+            "telegraph"
+        ) {
+          this.clearTint();
+        }
+      },
+    );
   }
 
   private updateBasil(time: number) {
     let velocityX =
-      Math.sin(time / 140 + this.zigzagPhase) *
+      Math.sin(
+        time / 140 +
+          this.zigzagPhase,
+      ) *
       BASIL_HORIZONTAL_SPEED *
       this.speedMultiplier;
 
-    if (this.x <= BASIL_MIN_X && velocityX < 0) {
-      velocityX = Math.abs(velocityX);
+    if (
+      this.x <= BASIL_MIN_X &&
+      velocityX < 0
+    ) {
+      velocityX =
+        Math.abs(velocityX);
     }
 
-    if (this.x >= BASIL_MAX_X && velocityX > 0) {
-      velocityX = -Math.abs(velocityX);
+    if (
+      this.x >= BASIL_MAX_X &&
+      velocityX > 0
+    ) {
+      velocityX =
+        -Math.abs(velocityX);
     }
 
     this.setVelocity(
       velocityX,
-      VERTICAL_SPEEDS.basil * this.speedMultiplier,
+      VERTICAL_SPEEDS.basil *
+        this.speedMultiplier,
     );
 
     this.setAngle(
@@ -586,10 +932,18 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     playerX: number,
     playerY: number,
   ) {
-    if (this.forkState === "approach") {
-      this.updateNormalMovement(time);
+    if (
+      this.forkState ===
+      "approach"
+    ) {
+      this.updateNormalMovement(
+        time,
+      );
 
-      if (this.y < FORK_DIVE_TRIGGER_Y) {
+      if (
+        this.y <
+        FORK_DIVE_TRIGGER_Y
+      ) {
         return;
       }
 
@@ -599,7 +953,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.forkState = "telegraph";
 
       this.forkDiveTime =
-        time + FORK_TELEGRAPH_DURATION;
+        time +
+        FORK_TELEGRAPH_DURATION;
 
       this.setVelocity(0, 0);
       this.setTint(0xf2cf66);
@@ -608,20 +963,23 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     if (
-      this.forkState !== "telegraph" ||
-      time < this.forkDiveTime
+      this.forkState !==
+        "telegraph" ||
+      time <
+        this.forkDiveTime
     ) {
       return;
     }
 
     this.clearTint();
 
-    const angle = Phaser.Math.Angle.Between(
-      this.x,
-      this.y,
-      this.targetX,
-      this.targetY,
-    );
+    const angle =
+      Phaser.Math.Angle.Between(
+        this.x,
+        this.y,
+        this.targetX,
+        this.targetY,
+      );
 
     this.setVelocity(
       Math.cos(angle) *
@@ -641,23 +999,31 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     playerY: number,
     onShoot: GraterShootCallback,
   ) {
-    if (this.graterState === "approach") {
+    if (
+      this.graterState ===
+      "approach"
+    ) {
       this.updateGraterMovement(
         time,
         VERTICAL_SPEEDS.grater,
       );
 
-      if (this.y < GRATER_ATTACK_TRIGGER_Y) {
+      if (
+        this.y <
+        GRATER_ATTACK_TRIGGER_Y
+      ) {
         return;
       }
 
       this.targetX = playerX;
       this.targetY = playerY;
 
-      this.graterState = "telegraph";
+      this.graterState =
+        "telegraph";
 
       this.graterShootTime =
-        time + GRATER_TELEGRAPH_DURATION;
+        time +
+        GRATER_TELEGRAPH_DURATION;
 
       this.setVelocity(0, 0);
       this.setTint(0xe84a32);
@@ -665,15 +1031,25 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
-    if (this.graterState === "telegraph") {
-      if (time < this.graterShootTime) {
+    if (
+      this.graterState ===
+      "telegraph"
+    ) {
+      if (
+        time <
+        this.graterShootTime
+      ) {
         return;
       }
 
       this.clearTint();
 
-      if (this.isGraterDamaged) {
-        this.setTint(GRATER_DAMAGED_TINT);
+      if (
+        this.isGraterDamaged
+      ) {
+        this.setTint(
+          GRATER_DAMAGED_TINT,
+        );
       }
 
       onShoot(
@@ -684,13 +1060,22 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       );
 
       this.graterState = "roam";
-      this.scheduleGraterRetreat(time);
+
+      this.scheduleGraterRetreat(
+        time,
+      );
 
       return;
     }
 
-    if (this.graterState === "retreat") {
-      this.updateGraterRetreat(time);
+    if (
+      this.graterState ===
+      "retreat"
+    ) {
+      this.updateGraterRetreat(
+        time,
+      );
+
       return;
     }
 
@@ -700,10 +1085,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     );
 
     if (
-      this.graterRetreats < GRATER_MAX_RETREATS &&
-      time >= this.graterRetreatAt
+      this.graterRetreats <
+        GRATER_MAX_RETREATS &&
+      time >=
+        this.graterRetreatAt
     ) {
-      this.startGraterRetreat(time);
+      this.startGraterRetreat(
+        time,
+      );
     }
   }
 
@@ -712,17 +1101,24 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     verticalSpeed: number,
   ) {
     const velocityX =
-      this.getGraterHorizontalVelocity(time);
+      this.getGraterHorizontalVelocity(
+        time,
+      );
 
     this.setVelocity(
       velocityX,
-      verticalSpeed * this.speedMultiplier,
+      verticalSpeed *
+        this.speedMultiplier,
     );
   }
 
-  private updateGraterRetreat(time: number) {
+  private updateGraterRetreat(
+    time: number,
+  ) {
     const velocityX =
-      this.getGraterHorizontalVelocity(time);
+      this.getGraterHorizontalVelocity(
+        time,
+      );
 
     this.setVelocity(
       velocityX,
@@ -730,26 +1126,39 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.speedMultiplier,
     );
 
-    if (time < this.graterRetreatEndsAt) {
+    if (
+      time <
+      this.graterRetreatEndsAt
+    ) {
       return;
     }
 
     this.graterState = "roam";
 
-    if (this.graterRetreats < GRATER_MAX_RETREATS) {
-      this.scheduleGraterRetreat(time);
+    if (
+      this.graterRetreats <
+      GRATER_MAX_RETREATS
+    ) {
+      this.scheduleGraterRetreat(
+        time,
+      );
     }
   }
 
-  private startGraterRetreat(time: number) {
+  private startGraterRetreat(
+    time: number,
+  ) {
     this.graterRetreats += 1;
     this.graterState = "retreat";
 
     this.graterRetreatEndsAt =
-      time + GRATER_RETREAT_DURATION;
+      time +
+      GRATER_RETREAT_DURATION;
   }
 
-  private scheduleGraterRetreat(time: number) {
+  private scheduleGraterRetreat(
+    time: number,
+  ) {
     this.graterRetreatAt =
       time +
       Phaser.Math.Between(
@@ -758,18 +1167,31 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       );
   }
 
-  private getGraterHorizontalVelocity(time: number) {
+  private getGraterHorizontalVelocity(
+    time: number,
+  ) {
     let velocityX =
-      Math.sin(time / 320 + this.zigzagPhase) *
+      Math.sin(
+        time / 320 +
+          this.zigzagPhase,
+      ) *
       GRATER_HORIZONTAL_SPEED *
       this.speedMultiplier;
 
-    if (this.x <= GRATER_MIN_X && velocityX < 0) {
-      velocityX = Math.abs(velocityX);
+    if (
+      this.x <= GRATER_MIN_X &&
+      velocityX < 0
+    ) {
+      velocityX =
+        Math.abs(velocityX);
     }
 
-    if (this.x >= GRATER_MAX_X && velocityX > 0) {
-      velocityX = -Math.abs(velocityX);
+    if (
+      this.x >= GRATER_MAX_X &&
+      velocityX > 0
+    ) {
+      velocityX =
+        -Math.abs(velocityX);
     }
 
     return velocityX;
@@ -779,32 +1201,51 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     time: number,
     onShoot: ColanderShootCallback,
   ) {
-    if (this.colanderState === "approach") {
+    if (
+      this.colanderState ===
+      "approach"
+    ) {
       this.setVelocity(
-        this.getColanderHorizontalVelocity(time),
+        this.getColanderHorizontalVelocity(
+          time,
+        ),
         VERTICAL_SPEEDS.colander *
           this.speedMultiplier,
       );
 
-      if (this.y < COLANDER_ROAM_Y) {
+      if (
+        this.y <
+        COLANDER_ROAM_Y
+      ) {
         return;
       }
 
-      this.setY(COLANDER_ROAM_Y);
+      this.setY(
+        COLANDER_ROAM_Y,
+      );
+
       this.setVelocity(0, 0);
 
-      this.colanderState = "roam";
+      this.colanderState =
+        "roam";
 
       this.colanderShootAt =
-        time + COLANDER_FIRST_SHOT_DELAY;
+        time +
+        COLANDER_FIRST_SHOT_DELAY;
 
       return;
     }
 
-    if (this.colanderState === "telegraph") {
+    if (
+      this.colanderState ===
+      "telegraph"
+    ) {
       this.setVelocity(0, 0);
 
-      if (time < this.colanderTelegraphEndsAt) {
+      if (
+        time <
+        this.colanderTelegraphEndsAt
+      ) {
         return;
       }
 
@@ -815,75 +1256,114 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.y + 12,
       );
 
-      this.colanderState = "roam";
+      this.colanderState =
+        "roam";
 
       this.colanderShootAt =
-        time + COLANDER_SHOT_INTERVAL;
+        time +
+        COLANDER_SHOT_INTERVAL;
 
       return;
     }
 
     this.setVelocity(
-      this.getColanderHorizontalVelocity(time),
+      this.getColanderHorizontalVelocity(
+        time,
+      ),
       0,
     );
 
-    if (time < this.colanderShootAt) {
+    if (
+      time <
+      this.colanderShootAt
+    ) {
       return;
     }
 
-    this.colanderState = "telegraph";
+    this.colanderState =
+      "telegraph";
 
     this.colanderTelegraphEndsAt =
-      time + COLANDER_TELEGRAPH_DURATION;
+      time +
+      COLANDER_TELEGRAPH_DURATION;
 
     this.setVelocity(0, 0);
-    this.setTint(COLANDER_TELEGRAPH_TINT);
+
+    this.setTint(
+      COLANDER_TELEGRAPH_TINT,
+    );
   }
 
-  private getColanderHorizontalVelocity(time: number) {
+  private getColanderHorizontalVelocity(
+    time: number,
+  ) {
     let velocityX =
-      Math.sin(time / 420 + this.zigzagPhase) *
+      Math.sin(
+        time / 420 +
+          this.zigzagPhase,
+      ) *
       COLANDER_HORIZONTAL_SPEED *
       this.speedMultiplier;
 
-    if (this.x <= COLANDER_MIN_X && velocityX < 0) {
-      velocityX = Math.abs(velocityX);
+    if (
+      this.x <= COLANDER_MIN_X &&
+      velocityX < 0
+    ) {
+      velocityX =
+        Math.abs(velocityX);
     }
 
-    if (this.x >= COLANDER_MAX_X && velocityX > 0) {
-      velocityX = -Math.abs(velocityX);
+    if (
+      this.x >= COLANDER_MAX_X &&
+      velocityX > 0
+    ) {
+      velocityX =
+        -Math.abs(velocityX);
     }
 
     return velocityX;
   }
 
   private flashColanderHit() {
-    if (this.colanderState === "telegraph") {
+    if (
+      this.colanderState ===
+      "telegraph"
+    ) {
       return;
     }
 
     this.setTint(0xe3dfd3);
 
-    this.scene.time.delayedCall(80, () => {
-      if (
-        this.active &&
-        this.colanderState !== "telegraph"
-      ) {
-        this.clearTint();
-      }
-    });
+    this.scene.time.delayedCall(
+      80,
+      () => {
+        if (
+          this.active &&
+          this.colanderState !==
+            "telegraph"
+        ) {
+          this.clearTint();
+        }
+      },
+    );
   }
 
   private applyGraterDamagedState() {
     this.isGraterDamaged = true;
     this.setAngle(8);
 
-    if (this.graterState !== "telegraph") {
-      this.setTint(GRATER_DAMAGED_TINT);
+    if (
+      this.graterState !==
+      "telegraph"
+    ) {
+      this.setTint(
+        GRATER_DAMAGED_TINT,
+      );
     }
 
-    if (this.graterDamageSmoke) {
+    if (
+      this.graterDamageSmoke
+    ) {
       return;
     }
 
@@ -929,7 +1409,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   private startCriticalBlink() {
-    if (this.isCriticalBlinking) {
+    if (
+      this.isCriticalBlinking
+    ) {
       return;
     }
 

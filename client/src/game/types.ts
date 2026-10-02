@@ -1,6 +1,9 @@
 export type EnemyPattern = "straight" | "zigzag";
 
-export type BossAttackPattern = "straight" | "triple" | "aimed";
+export type BossAttackPattern =
+  | "straight"
+  | "triple"
+  | "aimed";
 
 export type EnemyType =
   | "tomato"
@@ -10,7 +13,8 @@ export type EnemyType =
   | "colander"
   | "ravioli"
   | "pepper-grinder"
-  | "meatball";
+  | "meatball"
+  | "pasta-pot";
 
 export type PowerUpType =
   | "salsa-rossa"
