@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 
-import { Player } from "../entities/Player";
-import { Projectile } from "../entities/Projectile";
+import { Player } from "../entities/player/Player";
+import { Projectile } from "../entities/player/Projectile";
 import { InputManager } from "../input/InputManager";
 
 const RAPID_FIRE_COOLDOWN = 120;

@@ -1,20 +1,20 @@
 import Phaser from "phaser";
 
-import { Player } from "../entities/Player";
-import { Enemy } from "../entities/Enemy";
+import { Player } from "../entities/player/Player";
+import { Enemy } from "../entities/enemies/Enemy";
 
-import { Boss } from "../entities/Boss";
-import { PastaMachineBoss } from "../entities/PastaMachineBoss";
+import { Boss } from "../entities/bosses/sauce-king/Boss";
+import { PastaMachineBoss } from "../entities/bosses/pasta-machine/PastaMachineBoss";
 
-import { BossProjectile } from "../entities/BossProjectile";
-import { GraterProjectile } from "../entities/GraterProjectile";
-import { ColanderProjectile } from "../entities/ColanderProjectile";
-import { PepperProjectile } from "../entities/PepperProjectile";
-import { DoughStripProjectile } from "../entities/DoughStripProjectile";
+import { BossProjectile } from "../entities/bosses/sauce-king/BossProjectile";
+import { GraterProjectile } from "../entities/enemies/stage1/GraterProjectile";
+import { ColanderProjectile } from "../entities/enemies/stage1/ColanderProjectile";
+import { PepperProjectile } from "../entities/enemies/stage2/PepperProjectile";
+import { DoughStripProjectile } from "../entities/bosses/pasta-machine/DoughStripProjectile";
 
-import { BoilingWaterHazard } from "../entities/BoilingWaterHazard";
-import { RollingPinTrailHazard } from "../entities/RollingPinTrailHazard";
-import { PastaRollerLaneHazard } from "../entities/PastaRollerLaneHazard";
+import { BoilingWaterHazard } from "../entities/enemies/stage2/BoilingWaterHazard";
+import { RollingPinTrailHazard } from "../entities/enemies/stage2/RollingPinTrailHazard";
+import { PastaRollerLaneHazard } from "../entities/bosses/pasta-machine/PastaRollerLaneHazard";
 
 import { InputManager } from "../input/InputManager";
 import { WaveManager } from "../systems/WaveManager";
@@ -27,33 +27,33 @@ import { GameUI } from "../ui/GameUI";
 
 import { TOTAL_STAGES } from "../config/progressionConfig";
 
-import { createClassicBoxTexture } from "../entities/createClassicBoxTexture";
-import { createSpaghettiShotTexture } from "../entities/createSpaghettiShotTexture";
+import { createClassicBoxTexture } from "../entities/player/createClassicBoxTexture";
+import { createSpaghettiShotTexture } from "../entities/player/createSpaghettiShotTexture";
 
-import { createTomatoEnemyTexture } from "../entities/createTomatoEnemyTexture";
-import { createForkEnemyTexture } from "../entities/createForkEnemyTexture";
-import { createGraterEnemyTexture } from "../entities/createGraterEnemyTexture";
-import { createBasilEnemyTexture } from "../entities/createBasilEnemyTexture";
-import { createColanderEnemyTexture } from "../entities/createColanderEnemyTexture";
+import { createTomatoEnemyTexture } from "../entities/enemies/stage1/createTomatoEnemyTexture";
+import { createForkEnemyTexture } from "../entities/enemies/stage1/createForkEnemyTexture";
+import { createGraterEnemyTexture } from "../entities/enemies/stage1/createGraterEnemyTexture";
+import { createBasilEnemyTexture } from "../entities/enemies/stage1/createBasilEnemyTexture";
+import { createColanderEnemyTexture } from "../entities/enemies/stage1/createColanderEnemyTexture";
 
-import { createRavioliEnemyTexture } from "../entities/createRavioliEnemyTexture";
-import { createPepperGrinderEnemyTexture } from "../entities/createPepperGrinderEnemyTexture";
-import { createMeatballEnemyTexture } from "../entities/createMeatballEnemyTexture";
-import { createPastaPotEnemyTexture } from "../entities/createPastaPotEnemyTexture";
-import { createRollingPinEnemyTexture } from "../entities/createRollingPinEnemyTexture";
+import { createRavioliEnemyTexture } from "../entities/enemies/stage2/createRavioliEnemyTexture";
+import { createPepperGrinderEnemyTexture } from "../entities/enemies/stage2/createPepperGrinderEnemyTexture";
+import { createMeatballEnemyTexture } from "../entities/enemies/stage2/createMeatballEnemyTexture";
+import { createPastaPotEnemyTexture } from "../entities/enemies/stage2/createPastaPotEnemyTexture";
+import { createRollingPinEnemyTexture } from "../entities/enemies/stage2/createRollingPinEnemyTexture";
 
-import { createCheeseShardTexture } from "../entities/createCheeseShardTexture";
-import { createColanderProjectileTexture } from "../entities/createColanderProjectileTexture";
-import { createPepperProjectileTexture } from "../entities/createPepperProjectileTexture";
-import { createBoilingWaterTexture } from "../entities/createBoilingWaterTexture";
-import { createRollingPinTrailTexture } from "../entities/createRollingPinTrailTexture";
+import { createCheeseShardTexture } from "../entities/enemies/stage1/createCheeseShardTexture";
+import { createColanderProjectileTexture } from "../entities/enemies/stage1/createColanderProjectileTexture";
+import { createPepperProjectileTexture } from "../entities/enemies/stage2/createPepperProjectileTexture";
+import { createBoilingWaterTexture } from "../entities/enemies/stage2/createBoilingWaterTexture";
+import { createRollingPinTrailTexture } from "../entities/enemies/stage2/createRollingPinTrailTexture";
 
-import { createBossTexture } from "../entities/createBossTexture";
-import { createBossProjectileTexture } from "../entities/createBossProjectileTexture";
+import { createBossTexture } from "../entities/bosses/sauce-king/createBossTexture";
+import { createBossProjectileTexture } from "../entities/bosses/sauce-king/createBossProjectileTexture";
 
-import { createPastaMachineBossTexture } from "../entities/createPastaMachineBossTexture";
-import { createDoughStripTexture } from "../entities/createDoughStripTexture";
-import { createPastaRollerTexture } from "../entities/createPastaRollerTexture";
+import { createPastaMachineBossTexture } from "../entities/bosses/pasta-machine/createPastaMachineBossTexture";
+import { createDoughStripTexture } from "../entities/bosses/pasta-machine/createDoughStripTexture";
+import { createPastaRollerTexture } from "../entities/bosses/pasta-machine/createPastaRollerTexture";
 
 import type { EnemyPattern, EnemyType } from "../types";
 

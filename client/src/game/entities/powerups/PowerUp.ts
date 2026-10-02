@@ -2,7 +2,7 @@ import Phaser from "phaser";
 
 import type {
   PowerUpType,
-} from "../types";
+} from "../../types";
 
 const POWER_UP_SPEED = 35;
 
