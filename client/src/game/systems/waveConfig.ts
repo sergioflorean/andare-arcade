@@ -9,7 +9,7 @@ export interface WaveDifficulty {
   minSpecials: number;
 }
 
-export const WAVES_PER_STAGE = 8;
+export const WAVES_PER_STAGE = 5;
 
 export const NEXT_WAVE_DELAY = 250;
 export const WAVE_ADVANCE_TIMEOUT = 1200;

@@ -14,7 +14,8 @@ export type EnemyType =
   | "ravioli"
   | "pepper-grinder"
   | "meatball"
-  | "pasta-pot";
+  | "pasta-pot"
+  | "rolling-pin";
 
 export type PowerUpType =
   | "salsa-rossa"

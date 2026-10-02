@@ -12,6 +12,7 @@ const TEXTURE_KEYS: Record<EnemyType, string> = {
   "pepper-grinder": "pepper-grinder-enemy",
   meatball: "meatball-enemy",
   "pasta-pot": "pasta-pot",
+  "rolling-pin": "rolling-pin-enemy",
 };
 
 const MAX_HEALTH: Record<EnemyType, number> = {
@@ -24,6 +25,7 @@ const MAX_HEALTH: Record<EnemyType, number> = {
   "pepper-grinder": 3,
   meatball: 3,
   "pasta-pot": 4,
+  "rolling-pin": 4,
 };
 
 const VERTICAL_SPEEDS: Record<EnemyType, number> = {
@@ -36,6 +38,7 @@ const VERTICAL_SPEEDS: Record<EnemyType, number> = {
   "pepper-grinder": 32,
   meatball: 18,
   "pasta-pot": 24,
+  "rolling-pin": 48,
 };
 
 const ZIGZAG_SPEEDS: Record<EnemyType, number> = {
@@ -48,6 +51,7 @@ const ZIGZAG_SPEEDS: Record<EnemyType, number> = {
   "pepper-grinder": 40,
   meatball: 40,
   "pasta-pot": 30,
+  "rolling-pin": 0,
 };
 
 const FORK_DIVE_TRIGGER_Y = 70;
@@ -126,12 +130,51 @@ const PASTA_POT_TELEGRAPH_DURATION = 500;
 const PASTA_POT_TELEGRAPH_TINT = 0x71d5ef;
 const PASTA_POT_HIT_TINT = 0xe7f2f4;
 
+const ROLLING_PIN_SCALE = 1.2;
+const ROLLING_PIN_ATTACK_Y = 110;
+const ROLLING_PIN_SECOND_PASS_Y = 150;
+const ROLLING_PIN_EDGE_X = 18;
+const ROLLING_PIN_OFFSCREEN_MARGIN = 26;
+const ROLLING_PIN_DASH_SPEED = 220;
+const ROLLING_PIN_DASH_TIMEOUT = 1600;
+const ROLLING_PIN_TELEGRAPH_DURATION = 450;
+const ROLLING_PIN_TELEGRAPH_TINT = 0xff493d;
+const ROLLING_PIN_HIT_TINT = 0xffd6bd;
+const ROLLING_PIN_MAX_PASSES = 2;
+
 type ForkState = "approach" | "telegraph" | "dive";
-type GraterState = "approach" | "telegraph" | "roam" | "retreat";
-type ColanderState = "approach" | "roam" | "telegraph";
-type RavioliState = "armored" | "broken" | "telegraph" | "charge";
-type PepperGrinderState = "approach" | "roam" | "telegraph";
-type PastaPotState = "approach" | "roam" | "telegraph";
+
+type GraterState =
+  | "approach"
+  | "telegraph"
+  | "roam"
+  | "retreat";
+
+type ColanderState =
+  | "approach"
+  | "roam"
+  | "telegraph";
+
+type RavioliState =
+  | "armored"
+  | "broken"
+  | "telegraph"
+  | "charge";
+
+type PepperGrinderState =
+  | "approach"
+  | "roam"
+  | "telegraph";
+
+type PastaPotState =
+  | "approach"
+  | "roam"
+  | "telegraph";
+
+type RollingPinState =
+  | "approach"
+  | "telegraph"
+  | "dash";
 
 type GraterShootCallback = (
   x: number,
@@ -154,6 +197,10 @@ type PepperShootCallback = (
 
 type PastaPotPourCallback = (
   x: number,
+  y: number,
+) => void;
+
+type RollingPinTrailCallback = (
   y: number,
 ) => void;
 
@@ -196,6 +243,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private pastaPotDirection: -1 | 1 =
     Math.random() < 0.5 ? -1 : 1;
 
+  private rollingPinState: RollingPinState = "approach";
+  private rollingPinTelegraphEndsAt = 0;
+  private rollingPinDashEndsAt = 0;
+  private rollingPinPasses = 0;
+  private rollingPinDirection: -1 | 1 =
+    Math.random() < 0.5 ? -1 : 1;
+
   private targetX = 0;
   private targetY = 0;
 
@@ -213,6 +267,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.enemyType = type;
     this.health = MAX_HEALTH[type];
     this.speedMultiplier = speedMultiplier;
+
     this.zigzagPhase = Phaser.Math.FloatBetween(
       0,
       Math.PI * 2,
@@ -221,24 +276,54 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
-    if (type === "grater") this.setScale(GRATER_SCALE);
-    if (type === "colander") this.setScale(COLANDER_SCALE);
-    if (type === "ravioli") this.setScale(RAVIOLI_SCALE);
+    if (type === "grater") {
+      this.setScale(GRATER_SCALE);
+    }
+
+    if (type === "colander") {
+      this.setScale(COLANDER_SCALE);
+    }
+
+    if (type === "ravioli") {
+      this.setScale(RAVIOLI_SCALE);
+    }
+
     if (type === "pepper-grinder") {
       this.setScale(PEPPER_GRINDER_SCALE);
     }
-    if (type === "meatball") this.setScale(MEATBALL_SCALE);
-    if (type === "pasta-pot") this.setScale(PASTA_POT_SCALE);
+
+    if (type === "meatball") {
+      this.setScale(MEATBALL_SCALE);
+    }
+
+    if (type === "pasta-pot") {
+      this.setScale(PASTA_POT_SCALE);
+    }
+
+    if (type === "rolling-pin") {
+      this.setScale(ROLLING_PIN_SCALE);
+
+      const startX =
+        this.rollingPinDirection > 0
+          ? ROLLING_PIN_EDGE_X
+          : scene.scale.width - ROLLING_PIN_EDGE_X;
+
+      this.resetPhysicsPosition(
+        startX,
+        y,
+      );
+    }
 
     this.once("destroy", () => {
-      this.scene.tweens.killTweensOf(this);
+      this.scene?.tweens.killTweensOf(this);
 
       this.graterDamageSmoke?.destroy();
       this.graterDamageSmoke = undefined;
     });
 
     this.setVelocityY(
-      VERTICAL_SPEEDS[type] * speedMultiplier,
+      VERTICAL_SPEEDS[type] *
+        speedMultiplier,
     );
   }
 
@@ -250,11 +335,20 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     onColanderShoot?: ColanderShootCallback,
     onPepperShoot?: PepperShootCallback,
     onPastaPotPour?: PastaPotPourCallback,
+    onRollingPinTrail?: RollingPinTrailCallback,
   ) {
     if (this.enemyType === "ravioli") {
       this.updateRavioli(time);
     } else if (this.enemyType === "meatball") {
       this.updateMeatball(time);
+    } else if (
+      this.enemyType === "rolling-pin" &&
+      onRollingPinTrail
+    ) {
+      this.updateRollingPin(
+        time,
+        onRollingPinTrail,
+      );
     } else if (
       this.enemyType === "pasta-pot" &&
       onPastaPotPour
@@ -307,6 +401,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.updateNormalMovement(time);
     }
 
+    if (!this.active) {
+      return;
+    }
+
     this.updateDamageVisual();
 
     if (
@@ -356,10 +454,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.flashPastaPotHit();
     }
 
+    if (this.enemyType === "rolling-pin") {
+      this.flashRollingPinHit();
+    }
+
     return false;
   }
 
-  private updateNormalMovement(time: number) {
+  private updateNormalMovement(
+    time: number,
+  ) {
     this.setVelocityY(
       VERTICAL_SPEEDS[this.enemyType] *
         this.speedMultiplier,
@@ -382,20 +486,246 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     );
   }
 
-  private updateRavioli(time: number) {
-    if (this.ravioliState === "armored") {
-      this.updateNormalMovement(time);
+  private updateRollingPin(
+    time: number,
+    onTrail: RollingPinTrailCallback,
+  ) {
+    if (
+      this.rollingPinState ===
+      "approach"
+    ) {
+      this.setVelocity(
+        0,
+        VERTICAL_SPEEDS["rolling-pin"] *
+          this.speedMultiplier,
+      );
+
+      if (
+        this.y <
+        ROLLING_PIN_ATTACK_Y
+      ) {
+        return;
+      }
+
+      this.resetPhysicsPosition(
+        this.x,
+        ROLLING_PIN_ATTACK_Y,
+      );
+
+      this.startRollingPinTelegraph(
+        time,
+      );
+
       return;
     }
 
-    if (this.ravioliState === "broken") {
-      this.ravioliState = "telegraph";
+    if (
+      this.rollingPinState ===
+      "telegraph"
+    ) {
+      this.setVelocity(0, 0);
+
+      if (
+        time <
+        this.rollingPinTelegraphEndsAt
+      ) {
+        return;
+      }
+
+      this.scene.tweens.killTweensOf(
+        this,
+      );
+
+      this.clearTint();
+      this.setAngle(0);
+      this.setScale(
+        ROLLING_PIN_SCALE,
+      );
+
+      this.rollingPinState =
+        "dash";
+
+      this.rollingPinDashEndsAt =
+        time +
+        ROLLING_PIN_DASH_TIMEOUT;
+
+      this.setVelocity(
+        this.rollingPinDirection *
+          ROLLING_PIN_DASH_SPEED *
+          this.speedMultiplier,
+        0,
+      );
+
+      return;
+    }
+
+    const passedRight =
+      this.rollingPinDirection > 0 &&
+      this.x >
+        this.scene.scale.width +
+          ROLLING_PIN_OFFSCREEN_MARGIN;
+
+    const passedLeft =
+      this.rollingPinDirection < 0 &&
+      this.x <
+        -ROLLING_PIN_OFFSCREEN_MARGIN;
+
+    const timedOut =
+      time >=
+      this.rollingPinDashEndsAt;
+
+    if (
+      !passedRight &&
+      !passedLeft &&
+      !timedOut
+    ) {
+      return;
+    }
+
+    this.finishRollingPinPass(
+      time,
+      onTrail,
+    );
+  }
+
+  private finishRollingPinPass(
+    time: number,
+    onTrail: RollingPinTrailCallback,
+  ) {
+    const trailY = this.y;
+
+    onTrail(trailY);
+
+    this.rollingPinPasses += 1;
+
+    this.setVelocity(0, 0);
+
+    if (
+      this.rollingPinPasses >=
+      ROLLING_PIN_MAX_PASSES
+    ) {
+      this.destroy();
+      return;
+    }
+
+    this.rollingPinDirection =
+      this.rollingPinDirection > 0
+        ? -1
+        : 1;
+
+    const nextX =
+      this.rollingPinDirection > 0
+        ? ROLLING_PIN_EDGE_X
+        : this.scene.scale.width -
+          ROLLING_PIN_EDGE_X;
+
+    this.resetPhysicsPosition(
+      nextX,
+      ROLLING_PIN_SECOND_PASS_Y,
+    );
+
+    this.startRollingPinTelegraph(
+      time,
+    );
+  }
+
+  private startRollingPinTelegraph(
+    time: number,
+  ) {
+    this.rollingPinState =
+      "telegraph";
+
+    this.rollingPinTelegraphEndsAt =
+      time +
+      ROLLING_PIN_TELEGRAPH_DURATION;
+
+    this.setVelocity(0, 0);
+
+    this.setTint(
+      ROLLING_PIN_TELEGRAPH_TINT,
+    );
+
+    this.setAngle(-8);
+
+    this.scene.tweens.add({
+      targets: this,
+      angle: 8,
+      scaleX:
+        ROLLING_PIN_SCALE * 1.1,
+      scaleY:
+        ROLLING_PIN_SCALE * 1.1,
+      duration: 70,
+      yoyo: true,
+      repeat: 2,
+    });
+  }
+
+  private resetPhysicsPosition(
+    x: number,
+    y: number,
+  ) {
+    const body =
+      this.body as Phaser.Physics.Arcade.Body;
+
+    body.reset(x, y);
+
+    this.setPosition(x, y);
+    this.setVelocity(0, 0);
+  }
+
+  private flashRollingPinHit() {
+    if (
+      this.rollingPinState ===
+      "telegraph"
+    ) {
+      return;
+    }
+
+    this.setTint(
+      ROLLING_PIN_HIT_TINT,
+    );
+
+    this.scene.time.delayedCall(
+      80,
+      () => {
+        if (
+          this.active &&
+          this.rollingPinState !==
+            "telegraph"
+        ) {
+          this.clearTint();
+        }
+      },
+    );
+  }
+
+  private updateRavioli(
+    time: number,
+  ) {
+    if (
+      this.ravioliState ===
+      "armored"
+    ) {
+      this.updateNormalMovement(
+        time,
+      );
+
+      return;
+    }
+
+    if (
+      this.ravioliState ===
+      "broken"
+    ) {
+      this.ravioliState =
+        "telegraph";
 
       this.ravioliChargeAt =
         time +
         RAVIOLI_TELEGRAPH_DURATION;
 
       this.setVelocity(0, 0);
+
       this.setTint(
         RAVIOLI_TELEGRAPH_TINT,
       );
@@ -403,7 +733,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
-    if (this.ravioliState === "telegraph") {
+    if (
+      this.ravioliState ===
+      "telegraph"
+    ) {
       this.setVelocity(0, 0);
 
       if (
@@ -422,7 +755,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
           this.speedMultiplier,
       );
 
-      this.ravioliState = "charge";
+      this.ravioliState =
+        "charge";
+
       return;
     }
 
@@ -431,9 +766,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   private breakRavioliArmor() {
     this.ravioliState = "broken";
+
     this.setTexture(
       RAVIOLI_CRACKED_TEXTURE,
     );
+
     this.setVelocity(0, 0);
 
     this.scene.tweens.add({
@@ -465,7 +802,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
-  private updateMeatball(time: number) {
+  private updateMeatball(
+    time: number,
+  ) {
     const angle =
       time *
         0.001 *
@@ -522,7 +861,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       "approach"
     ) {
       this.updatePastaPotMovement(
-        VERTICAL_SPEEDS["pasta-pot"],
+        VERTICAL_SPEEDS[
+          "pasta-pot"
+        ],
       );
 
       if (
@@ -532,9 +873,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         return;
       }
 
-      this.setY(PASTA_POT_ROAM_Y);
+      this.setY(
+        PASTA_POT_ROAM_Y,
+      );
 
-      this.pastaPotState = "roam";
+      this.pastaPotState =
+        "roam";
 
       this.pastaPotPourAt =
         time +
@@ -561,9 +905,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       );
 
       this.setAngle(0);
+
       this.setScale(
         PASTA_POT_SCALE,
       );
+
       this.clearTint();
 
       onPour(
@@ -571,7 +917,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.y + 8,
       );
 
-      this.pastaPotState = "roam";
+      this.pastaPotState =
+        "roam";
 
       this.pastaPotPourAt =
         time +
@@ -580,7 +927,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
-    this.updatePastaPotMovement(0);
+    this.updatePastaPotMovement(
+      0,
+    );
 
     if (
       time <
@@ -621,14 +970,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     verticalSpeed: number,
   ) {
     if (
-      this.x <= PASTA_POT_MIN_X &&
+      this.x <=
+        PASTA_POT_MIN_X &&
       this.pastaPotDirection < 0
     ) {
       this.pastaPotDirection = 1;
     }
 
     if (
-      this.x >= PASTA_POT_MAX_X &&
+      this.x >=
+        PASTA_POT_MAX_X &&
       this.pastaPotDirection > 0
     ) {
       this.pastaPotDirection = -1;
@@ -722,9 +1073,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       );
 
       this.setAngle(0);
+
       this.setScale(
         PEPPER_GRINDER_SCALE,
       );
+
       this.clearTint();
 
       this.firePepperSprinkle(
@@ -792,9 +1145,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       i += 1
     ) {
       this.scene.time.delayedCall(
-        i * PEPPER_BURST_DELAY,
+        i *
+          PEPPER_BURST_DELAY,
         () => {
-          if (!this.active) return;
+          if (
+            !this.active
+          ) {
+            return;
+          }
 
           const spawnX =
             this.x +
@@ -887,7 +1245,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     );
   }
 
-  private updateBasil(time: number) {
+  private updateBasil(
+    time: number,
+  ) {
     let velocityX =
       Math.sin(
         time / 140 +
@@ -897,7 +1257,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.speedMultiplier;
 
     if (
-      this.x <= BASIL_MIN_X &&
+      this.x <=
+        BASIL_MIN_X &&
       velocityX < 0
     ) {
       velocityX =
@@ -905,7 +1266,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     if (
-      this.x >= BASIL_MAX_X &&
+      this.x >=
+        BASIL_MAX_X &&
       velocityX > 0
     ) {
       velocityX =
@@ -947,17 +1309,27 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         return;
       }
 
-      this.targetX = playerX;
-      this.targetY = playerY;
+      this.targetX =
+        playerX;
 
-      this.forkState = "telegraph";
+      this.targetY =
+        playerY;
+
+      this.forkState =
+        "telegraph";
 
       this.forkDiveTime =
         time +
         FORK_TELEGRAPH_DURATION;
 
-      this.setVelocity(0, 0);
-      this.setTint(0xf2cf66);
+      this.setVelocity(
+        0,
+        0,
+      );
+
+      this.setTint(
+        0xf2cf66,
+      );
 
       return;
     }
@@ -990,7 +1362,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.speedMultiplier,
     );
 
-    this.forkState = "dive";
+    this.forkState =
+      "dive";
   }
 
   private updateGrater(
@@ -1015,8 +1388,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         return;
       }
 
-      this.targetX = playerX;
-      this.targetY = playerY;
+      this.targetX =
+        playerX;
+
+      this.targetY =
+        playerY;
 
       this.graterState =
         "telegraph";
@@ -1025,8 +1401,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         time +
         GRATER_TELEGRAPH_DURATION;
 
-      this.setVelocity(0, 0);
-      this.setTint(0xe84a32);
+      this.setVelocity(
+        0,
+        0,
+      );
+
+      this.setTint(
+        0xe84a32,
+      );
 
       return;
     }
@@ -1059,7 +1441,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.targetY,
       );
 
-      this.graterState = "roam";
+      this.graterState =
+        "roam";
 
       this.scheduleGraterRetreat(
         time,
@@ -1133,7 +1516,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
-    this.graterState = "roam";
+    this.graterState =
+      "roam";
 
     if (
       this.graterRetreats <
@@ -1149,7 +1533,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     time: number,
   ) {
     this.graterRetreats += 1;
-    this.graterState = "retreat";
+
+    this.graterState =
+      "retreat";
 
     this.graterRetreatEndsAt =
       time +
@@ -1179,7 +1565,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.speedMultiplier;
 
     if (
-      this.x <= GRATER_MIN_X &&
+      this.x <=
+        GRATER_MIN_X &&
       velocityX < 0
     ) {
       velocityX =
@@ -1187,7 +1574,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     if (
-      this.x >= GRATER_MAX_X &&
+      this.x >=
+        GRATER_MAX_X &&
       velocityX > 0
     ) {
       velocityX =
@@ -1224,7 +1612,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         COLANDER_ROAM_Y,
       );
 
-      this.setVelocity(0, 0);
+      this.setVelocity(
+        0,
+        0,
+      );
 
       this.colanderState =
         "roam";
@@ -1240,7 +1631,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.colanderState ===
       "telegraph"
     ) {
-      this.setVelocity(0, 0);
+      this.setVelocity(
+        0,
+        0,
+      );
 
       if (
         time <
@@ -1287,7 +1681,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       time +
       COLANDER_TELEGRAPH_DURATION;
 
-    this.setVelocity(0, 0);
+    this.setVelocity(
+      0,
+      0,
+    );
 
     this.setTint(
       COLANDER_TELEGRAPH_TINT,
@@ -1306,7 +1703,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.speedMultiplier;
 
     if (
-      this.x <= COLANDER_MIN_X &&
+      this.x <=
+        COLANDER_MIN_X &&
       velocityX < 0
     ) {
       velocityX =
@@ -1314,7 +1712,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     if (
-      this.x >= COLANDER_MAX_X &&
+      this.x >=
+        COLANDER_MAX_X &&
       velocityX > 0
     ) {
       velocityX =
@@ -1332,7 +1731,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
-    this.setTint(0xe3dfd3);
+    this.setTint(
+      0xe3dfd3,
+    );
 
     this.scene.time.delayedCall(
       80,
@@ -1349,7 +1750,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   private applyGraterDamagedState() {
-    this.isGraterDamaged = true;
+    this.isGraterDamaged =
+      true;
+
     this.setAngle(8);
 
     if (
@@ -1415,7 +1818,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
-    this.isCriticalBlinking = true;
+    this.isCriticalBlinking =
+      true;
 
     this.scene.tweens.add({
       targets: this,
