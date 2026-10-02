@@ -1,12 +1,12 @@
 import Phaser from "phaser";
 
-import { Player } from "../entities/Player";
-import { PowerUp } from "../entities/PowerUp";
+import { Player } from "../entities/player/Player";
+import { PowerUp } from "../entities/powerups/PowerUp";
 
-import { createSalsaRossaTexture } from "../entities/createSalsaRossaTexture";
-import { createPestoTexture } from "../entities/createPestoTexture";
-import { createParmesanTexture } from "../entities/createParmesanTexture";
-import { createGarlicTexture } from "../entities/createGarlicTexture";
+import { createSalsaRossaTexture } from "../entities/powerups/createSalsaRossaTexture";
+import { createPestoTexture } from "../entities/powerups/createPestoTexture";
+import { createParmesanTexture } from "../entities/powerups/createParmesanTexture";
+import { createGarlicTexture } from "../entities/powerups/createGarlicTexture";
 
 import type { PowerUpType } from "../types";
 

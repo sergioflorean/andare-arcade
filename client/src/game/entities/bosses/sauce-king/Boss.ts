@@ -2,7 +2,7 @@ import Phaser from "phaser";
 
 import type {
   BossAttackPattern,
-} from "../types";
+} from "../../../types";
 
 const BOSS_SPEED = 30;
 const ENRAGED_BOSS_SPEED = 44;

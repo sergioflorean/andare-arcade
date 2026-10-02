@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 
-import type { EnemyPattern, EnemyType } from "../types";
+import type { EnemyPattern, EnemyType } from "../../types";
 
 const TEXTURE_KEYS: Record<EnemyType, string> = {
   tomato: "tomato-enemy",

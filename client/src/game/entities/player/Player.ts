@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { InputManager } from "../input/InputManager";
+import { InputManager } from "../../input/InputManager";
 
 const PLAYER_SPEED = 90;
 
