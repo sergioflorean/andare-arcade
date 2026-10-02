@@ -19,5 +19,12 @@ export const GameCanvas = () => {
     };
   }, []);
 
-  return <div ref={gameContainerRef} className="game-container" />;
+  return (
+    <div className="game-frame">
+      <div
+        ref={gameContainerRef}
+        className="game-container"
+      />
+    </div>
+  );
 };

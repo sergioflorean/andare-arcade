@@ -108,6 +108,7 @@ export class WaveManager {
 
     const enemies = generateWave(
       difficulty,
+      this.stage,
       this.currentWave,
       WAVES_PER_STAGE,
     );

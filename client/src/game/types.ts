@@ -7,7 +7,10 @@ export type EnemyType =
   | "fork"
   | "grater"
   | "basil"
-  | "colander";
+  | "colander"
+  | "ravioli"
+  | "pepper-grinder"
+  | "meatball";
 
 export type PowerUpType =
   | "salsa-rossa"
