@@ -42,6 +42,9 @@ const PLAYER_START_Y = 245;
 const RESPAWN_DELAY = 500;
 const BOSS_SCORE = 2000;
 
+const INITIAL_LIVES = 5;
+const INITIAL_STAGE = 1;
+
 export class GameScene extends Phaser.Scene {
   private player!: Player;
 
@@ -66,10 +69,10 @@ export class GameScene extends Phaser.Scene {
   private bossHealthBarBackground?: Phaser.GameObjects.Graphics;
   private bossHealthBar?: Phaser.GameObjects.Graphics;
 
-  private lives = 3;
+  private lives = INITIAL_LIVES;
 
   // TEMPORAL: Stage 2 para pruebas.
-  private currentStage = 2;
+  private currentStage = INITIAL_STAGE;
 
   private isPlayerInvulnerable = false;
   private isPlayerRespawning = false;
@@ -215,11 +218,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resetGameState() {
-    this.lives = 3;
+    this.lives = INITIAL_LIVES;
 
     // TEMPORAL: Stage 2 para pruebas.
     // Regresar a 1 cuando terminemos.
-    this.currentStage = 2;
+    this.currentStage = INITIAL_STAGE;
 
     this.enemies = [];
 
