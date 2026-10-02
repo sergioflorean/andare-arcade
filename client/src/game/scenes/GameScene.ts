@@ -2,13 +2,19 @@ import Phaser from "phaser";
 
 import { Player } from "../entities/Player";
 import { Enemy } from "../entities/Enemy";
+
 import { Boss } from "../entities/Boss";
+import { PastaMachineBoss } from "../entities/PastaMachineBoss";
+
 import { BossProjectile } from "../entities/BossProjectile";
 import { GraterProjectile } from "../entities/GraterProjectile";
 import { ColanderProjectile } from "../entities/ColanderProjectile";
 import { PepperProjectile } from "../entities/PepperProjectile";
+import { DoughStripProjectile } from "../entities/DoughStripProjectile";
+
 import { BoilingWaterHazard } from "../entities/BoilingWaterHazard";
 import { RollingPinTrailHazard } from "../entities/RollingPinTrailHazard";
+import { PastaRollerLaneHazard } from "../entities/PastaRollerLaneHazard";
 
 import { InputManager } from "../input/InputManager";
 import { WaveManager } from "../systems/WaveManager";
@@ -23,33 +29,42 @@ import { TOTAL_STAGES } from "../config/progressionConfig";
 
 import { createClassicBoxTexture } from "../entities/createClassicBoxTexture";
 import { createSpaghettiShotTexture } from "../entities/createSpaghettiShotTexture";
+
 import { createTomatoEnemyTexture } from "../entities/createTomatoEnemyTexture";
 import { createForkEnemyTexture } from "../entities/createForkEnemyTexture";
 import { createGraterEnemyTexture } from "../entities/createGraterEnemyTexture";
 import { createBasilEnemyTexture } from "../entities/createBasilEnemyTexture";
 import { createColanderEnemyTexture } from "../entities/createColanderEnemyTexture";
+
 import { createRavioliEnemyTexture } from "../entities/createRavioliEnemyTexture";
 import { createPepperGrinderEnemyTexture } from "../entities/createPepperGrinderEnemyTexture";
 import { createMeatballEnemyTexture } from "../entities/createMeatballEnemyTexture";
 import { createPastaPotEnemyTexture } from "../entities/createPastaPotEnemyTexture";
 import { createRollingPinEnemyTexture } from "../entities/createRollingPinEnemyTexture";
+
 import { createCheeseShardTexture } from "../entities/createCheeseShardTexture";
 import { createColanderProjectileTexture } from "../entities/createColanderProjectileTexture";
 import { createPepperProjectileTexture } from "../entities/createPepperProjectileTexture";
 import { createBoilingWaterTexture } from "../entities/createBoilingWaterTexture";
 import { createRollingPinTrailTexture } from "../entities/createRollingPinTrailTexture";
+
 import { createBossTexture } from "../entities/createBossTexture";
 import { createBossProjectileTexture } from "../entities/createBossProjectileTexture";
+
+import { createPastaMachineBossTexture } from "../entities/createPastaMachineBossTexture";
+import { createDoughStripTexture } from "../entities/createDoughStripTexture";
+import { createPastaRollerTexture } from "../entities/createPastaRollerTexture";
 
 import type { EnemyPattern, EnemyType } from "../types";
 
 const PLAYER_START_X = 112;
 const PLAYER_START_Y = 245;
+
 const RESPAWN_DELAY = 500;
 const BOSS_SCORE = 2000;
 
-const INITIAL_LIVES = 5;
-const INITIAL_STAGE = 1;
+const INITIAL_LIVES = 10;
+const INITIAL_STAGE = 2;
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
@@ -69,10 +84,13 @@ export class GameScene extends Phaser.Scene {
   private graterProjectiles: GraterProjectile[] = [];
   private colanderProjectiles: ColanderProjectile[] = [];
   private pepperProjectiles: PepperProjectile[] = [];
+  private doughStripProjectiles: DoughStripProjectile[] = [];
+
   private boilingWaterHazards: BoilingWaterHazard[] = [];
   private rollingPinTrails: RollingPinTrailHazard[] = [];
+  private pastaRollerLaneHazards: PastaRollerLaneHazard[] = [];
 
-  private boss?: Boss;
+  private boss?: Boss | PastaMachineBoss;
 
   private bossHealthBarBackground?: Phaser.GameObjects.Graphics;
   private bossHealthBar?: Phaser.GameObjects.Graphics;
@@ -142,9 +160,7 @@ export class GameScene extends Phaser.Scene {
   update(time: number, delta: number) {
     this.starfieldManager.update(delta);
 
-    if (this.handleFinishedState()) {
-      return;
-    }
+    if (this.handleFinishedState()) return;
 
     if (this.statsManager.updateCombo(time)) {
       this.updateComboHud();
@@ -177,17 +193,9 @@ export class GameScene extends Phaser.Scene {
           );
         },
         (x, y) => {
-          this.spawnColanderBurst(
-            x,
-            y,
-          );
+          this.spawnColanderBurst(x, y);
         },
-        (
-          x,
-          y,
-          velocityX,
-          velocityY,
-        ) => {
+        (x, y, velocityX, velocityY) => {
           this.spawnPepperProjectile(
             x,
             y,
@@ -196,65 +204,33 @@ export class GameScene extends Phaser.Scene {
           );
         },
         () => {
-          this.spawnBoilingWaterHazard(
-            enemy,
-          );
+          this.spawnBoilingWaterHazard(enemy);
         },
         (y) => {
-          this.spawnRollingPinTrail(
-            y,
-          );
+          this.spawnRollingPinTrail(y);
         },
       );
     });
 
     this.updateEnemyProjectiles();
-
     this.powerUpManager.update();
+    this.updateBoss(time);
 
-    if (this.boss?.active) {
-      this.boss.update(
-        time,
-        this.player.x,
-        this.player.y,
-        (
-          x,
-          y,
-          velocityX,
-          velocityY,
-        ) => {
-          this.spawnBossProjectile(
-            x,
-            y,
-            velocityX,
-            velocityY,
-          );
-        },
-      );
-    }
-
-    this.checkProjectileEnemyCollisions(
-      time,
-    );
-
+    this.checkProjectileEnemyCollisions(time);
     this.checkProjectileBossCollisions();
+
     this.checkEnemyPlayerCollisions();
     this.checkHostileProjectilePlayerCollisions();
     this.checkPowerUpPlayerCollisions();
 
     this.cleanupInactiveObjects();
 
-    this.waveManager.update(
-      this.enemies.length,
-    );
+    this.waveManager.update(this.enemies.length);
   }
 
   private resetGameState() {
-    this.lives =
-      INITIAL_LIVES;
-
-    this.currentStage =
-      INITIAL_STAGE;
+    this.lives = INITIAL_LIVES;
+    this.currentStage = INITIAL_STAGE;
 
     this.enemies = [];
 
@@ -262,37 +238,25 @@ export class GameScene extends Phaser.Scene {
     this.graterProjectiles = [];
     this.colanderProjectiles = [];
     this.pepperProjectiles = [];
+    this.doughStripProjectiles = [];
+
     this.boilingWaterHazards = [];
     this.rollingPinTrails = [];
+    this.pastaRollerLaneHazards = [];
 
     this.boss = undefined;
 
-    this.bossHealthBar =
-      undefined;
+    this.bossHealthBar = undefined;
+    this.bossHealthBarBackground = undefined;
 
-    this.bossHealthBarBackground =
-      undefined;
+    this.isPlayerInvulnerable = false;
+    this.isPlayerRespawning = false;
 
-    this.isPlayerInvulnerable =
-      false;
-
-    this.isPlayerRespawning =
-      false;
-
-    this.isGameOver =
-      false;
-
-    this.isBossActive =
-      false;
-
-    this.isStageClear =
-      false;
-
-    this.isResultsVisible =
-      false;
-
-    this.isGameComplete =
-      false;
+    this.isGameOver = false;
+    this.isBossActive = false;
+    this.isStageClear = false;
+    this.isResultsVisible = false;
+    this.isGameComplete = false;
   }
 
   private createTextures() {
@@ -304,6 +268,7 @@ export class GameScene extends Phaser.Scene {
     createGraterEnemyTexture(this);
     createBasilEnemyTexture(this);
     createColanderEnemyTexture(this);
+
     createRavioliEnemyTexture(this);
     createPepperGrinderEnemyTexture(this);
     createMeatballEnemyTexture(this);
@@ -318,13 +283,15 @@ export class GameScene extends Phaser.Scene {
 
     createBossTexture(this);
     createBossProjectileTexture(this);
+
+    createPastaMachineBossTexture(this);
+    createDoughStripTexture(this);
+    createPastaRollerTexture(this);
   }
 
   private handleFinishedState() {
     if (this.isGameComplete) {
-      if (
-        this.inputManager.isStartPressed()
-      ) {
+      if (this.inputManager.isStartPressed()) {
         this.scene.restart();
       }
 
@@ -350,10 +317,7 @@ export class GameScene extends Phaser.Scene {
       this.isResultsVisible &&
       this.inputManager.isStartPressed()
     ) {
-      if (
-        this.currentStage <
-        TOTAL_STAGES
-      ) {
+      if (this.currentStage < TOTAL_STAGES) {
         this.startNextStage();
       } else {
         this.showGameComplete();
@@ -364,32 +328,29 @@ export class GameScene extends Phaser.Scene {
   }
 
   private startStage() {
-    this.waveManager =
-      new WaveManager(
-        this,
-        this.currentStage,
-        (
-          x: number,
-          pattern: EnemyPattern,
-          type: EnemyType,
-          speedMultiplier: number,
-        ) => {
-          this.spawnEnemy(
-            x,
-            pattern,
-            type,
-            speedMultiplier,
-          );
-        },
-        (waveNumber: number) => {
-          this.uiManager.updateWave(
-            waveNumber,
-          );
-        },
-        () => {
-          this.handleWavesComplete();
-        },
-      );
+    this.waveManager = new WaveManager(
+      this,
+      this.currentStage,
+      (
+        x: number,
+        pattern: EnemyPattern,
+        type: EnemyType,
+        speedMultiplier: number,
+      ) => {
+        this.spawnEnemy(
+          x,
+          pattern,
+          type,
+          speedMultiplier,
+        );
+      },
+      (waveNumber: number) => {
+        this.uiManager.updateWave(waveNumber);
+      },
+      () => {
+        this.handleWavesComplete();
+      },
+    );
 
     this.waveManager.start();
   }
@@ -436,9 +397,7 @@ export class GameScene extends Phaser.Scene {
       this.statsManager.getScore(),
     );
 
-    this.uiManager.updateLives(
-      this.lives,
-    );
+    this.uiManager.updateLives(this.lives);
 
     this.uiManager.showStageIntro(
       this.currentStage,
@@ -457,10 +416,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private clearStageObjects() {
-    this.enemies.forEach(
-      (enemy) =>
-        enemy.destroy(),
-    );
+    this.enemies.forEach((enemy) => enemy.destroy());
 
     this.clearEnemyProjectiles();
     this.shootingManager.clear();
@@ -559,36 +515,22 @@ export class GameScene extends Phaser.Scene {
     }
 
     const shots = [
-      {
-        velocityX: -45,
-        velocityY: 105,
-      },
-      {
-        velocityX: 0,
-        velocityY: 120,
-      },
-      {
-        velocityX: 45,
-        velocityY: 105,
-      },
+      { velocityX: -45, velocityY: 105 },
+      { velocityX: 0, velocityY: 120 },
+      { velocityX: 45, velocityY: 105 },
     ];
 
-    shots.forEach(
-      ({
-        velocityX,
-        velocityY,
-      }) => {
-        this.colanderProjectiles.push(
-          new ColanderProjectile(
-            this,
-            x,
-            y,
-            velocityX,
-            velocityY,
-          ),
-        );
-      },
-    );
+    shots.forEach(({ velocityX, velocityY }) => {
+      this.colanderProjectiles.push(
+        new ColanderProjectile(
+          this,
+          x,
+          y,
+          velocityX,
+          velocityY,
+        ),
+      );
+    });
   }
 
   private spawnPepperProjectile(
@@ -635,9 +577,7 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
-  private spawnRollingPinTrail(
-    y: number,
-  ) {
+  private spawnRollingPinTrail(y: number) {
     if (
       this.isGameOver ||
       this.isStageClear ||
@@ -654,114 +594,228 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
+  private spawnDoughStrip(
+    x: number,
+    y: number,
+    velocityX: number,
+    velocityY: number,
+  ) {
+    if (
+      this.isGameOver ||
+      this.isStageClear ||
+      this.isGameComplete ||
+      !this.isBossActive
+    ) {
+      return;
+    }
+
+    this.doughStripProjectiles.push(
+      new DoughStripProjectile(
+        this,
+        x,
+        y,
+        velocityX,
+        velocityY,
+      ),
+    );
+  }
+
+  private spawnPastaRollerLane(
+    x: number,
+  ) {
+    if (
+      this.isGameOver ||
+      this.isStageClear ||
+      this.isGameComplete ||
+      !this.isBossActive
+    ) {
+      return;
+    }
+
+    this.pastaRollerLaneHazards.push(
+      new PastaRollerLaneHazard(
+        this,
+        x,
+      ),
+    );
+  }
+
   private updateEnemyProjectiles() {
     this.bossProjectiles.forEach(
-      (projectile) =>
-        projectile.update(),
+      (projectile) => projectile.update(),
     );
 
     this.graterProjectiles.forEach(
-      (projectile) =>
-        projectile.update(),
+      (projectile) => projectile.update(),
     );
 
     this.colanderProjectiles.forEach(
-      (projectile) =>
-        projectile.update(),
+      (projectile) => projectile.update(),
     );
 
     this.pepperProjectiles.forEach(
-      (projectile) =>
-        projectile.update(),
+      (projectile) => projectile.update(),
+    );
+
+    this.doughStripProjectiles.forEach(
+      (projectile) => projectile.update(),
     );
 
     this.boilingWaterHazards.forEach(
-      (hazard) =>
-        hazard.update(),
+      (hazard) => hazard.update(),
+    );
+
+    this.pastaRollerLaneHazards.forEach(
+      (hazard) => hazard.update(),
+    );
+  }
+
+  private updateBoss(time: number) {
+    if (
+      !this.boss?.active ||
+      !this.isBossActive
+    ) {
+      return;
+    }
+
+    if (
+      this.boss instanceof PastaMachineBoss
+    ) {
+      this.boss.update(
+        time,
+        this.player.x,
+        (
+          x,
+          y,
+          velocityX,
+          velocityY,
+        ) => {
+          this.spawnDoughStrip(
+            x,
+            y,
+            velocityX,
+            velocityY,
+          );
+        },
+        (laneX) => {
+          this.spawnPastaRollerLane(
+            laneX,
+          );
+        },
+      );
+
+      return;
+    }
+
+    this.boss.update(
+      time,
+      this.player.x,
+      this.player.y,
+      (
+        x,
+        y,
+        velocityX,
+        velocityY,
+      ) => {
+        this.spawnBossProjectile(
+          x,
+          y,
+          velocityX,
+          velocityY,
+        );
+      },
     );
   }
 
   private cleanupInactiveObjects() {
     this.enemies =
       this.enemies.filter(
-        (enemy) =>
-          enemy.active,
+        (enemy) => enemy.active,
       );
 
     this.bossProjectiles =
       this.bossProjectiles.filter(
-        (projectile) =>
-          projectile.active,
+        (projectile) => projectile.active,
       );
 
     this.graterProjectiles =
       this.graterProjectiles.filter(
-        (projectile) =>
-          projectile.active,
+        (projectile) => projectile.active,
       );
 
     this.colanderProjectiles =
       this.colanderProjectiles.filter(
-        (projectile) =>
-          projectile.active,
+        (projectile) => projectile.active,
       );
 
     this.pepperProjectiles =
       this.pepperProjectiles.filter(
-        (projectile) =>
-          projectile.active,
+        (projectile) => projectile.active,
+      );
+
+    this.doughStripProjectiles =
+      this.doughStripProjectiles.filter(
+        (projectile) => projectile.active,
       );
 
     this.boilingWaterHazards =
       this.boilingWaterHazards.filter(
-        (hazard) =>
-          hazard.active,
+        (hazard) => hazard.active,
       );
 
     this.rollingPinTrails =
       this.rollingPinTrails.filter(
-        (trail) =>
-          trail.active,
+        (trail) => trail.active,
+      );
+
+    this.pastaRollerLaneHazards =
+      this.pastaRollerLaneHazards.filter(
+        (hazard) => hazard.active,
       );
   }
 
   private clearEnemyProjectiles() {
     this.bossProjectiles.forEach(
-      (projectile) =>
-        projectile.destroy(),
+      (projectile) => projectile.destroy(),
     );
 
     this.graterProjectiles.forEach(
-      (projectile) =>
-        projectile.destroy(),
+      (projectile) => projectile.destroy(),
     );
 
     this.colanderProjectiles.forEach(
-      (projectile) =>
-        projectile.destroy(),
+      (projectile) => projectile.destroy(),
     );
 
     this.pepperProjectiles.forEach(
-      (projectile) =>
-        projectile.destroy(),
+      (projectile) => projectile.destroy(),
+    );
+
+    this.doughStripProjectiles.forEach(
+      (projectile) => projectile.destroy(),
     );
 
     this.boilingWaterHazards.forEach(
-      (hazard) =>
-        hazard.destroy(),
+      (hazard) => hazard.destroy(),
     );
 
     this.rollingPinTrails.forEach(
-      (trail) =>
-        trail.destroy(),
+      (trail) => trail.destroy(),
+    );
+
+    this.pastaRollerLaneHazards.forEach(
+      (hazard) => hazard.destroy(),
     );
 
     this.bossProjectiles = [];
     this.graterProjectiles = [];
     this.colanderProjectiles = [];
     this.pepperProjectiles = [];
+    this.doughStripProjectiles = [];
+
     this.boilingWaterHazards = [];
     this.rollingPinTrails = [];
+    this.pastaRollerLaneHazards = [];
   }
 
   private checkProjectileEnemyCollisions(
@@ -770,71 +824,54 @@ export class GameScene extends Phaser.Scene {
     const projectiles =
       this.shootingManager.getProjectiles();
 
-    projectiles.forEach(
-      (projectile) => {
-        this.enemies.forEach(
-          (enemy) => {
-            if (
-              !projectile.active ||
-              !enemy.active
-            ) {
-              return;
-            }
+    projectiles.forEach((projectile) => {
+      this.enemies.forEach((enemy) => {
+        if (
+          !projectile.active ||
+          !enemy.active
+        ) {
+          return;
+        }
 
-            if (
-              !this.physics.overlap(
-                projectile,
-                enemy,
-              )
-            ) {
-              return;
-            }
+        if (
+          !this.physics.overlap(
+            projectile,
+            enemy,
+          )
+        ) {
+          return;
+        }
 
-            const {
-              x,
-              y,
-            } = enemy;
+        const { x, y } = enemy;
 
-            const damage =
-              this.shootingManager
-                .getProjectileDamage(
-                  projectile,
-                );
+        const damage =
+          this.shootingManager.getProjectileDamage(
+            projectile,
+          );
 
-            projectile.destroy();
+        projectile.destroy();
+        this.statsManager.recordHit();
 
-            this.statsManager.recordHit();
+        const enemyDefeated =
+          enemy.takeDamage(damage);
 
-            const enemyDefeated =
-              enemy.takeDamage(
-                damage,
-              );
+        if (!enemyDefeated) {
+          return;
+        }
 
-            if (
-              !enemyDefeated
-            ) {
-              return;
-            }
-
-            this.statsManager
-              .recordEnemyDefeated(
-                time,
-              );
-
-            this.addComboScore(
-              100,
-            );
-
-            this.updateComboHud();
-
-            this.powerUpManager.trySpawn(
-              x,
-              y,
-            );
-          },
+        this.statsManager.recordEnemyDefeated(
+          time,
         );
-      },
-    );
+
+        this.addComboScore(100);
+        this.updateComboHud();
+
+        this.powerUpManager.trySpawn(
+          x,
+          y,
+        );
+      });
+    });
   }
 
   private checkProjectileBossCollisions() {
@@ -848,47 +885,41 @@ export class GameScene extends Phaser.Scene {
     const projectiles =
       this.shootingManager.getProjectiles();
 
-    projectiles.forEach(
-      (projectile) => {
-        if (
-          !projectile.active
-        ) {
-          return;
-        }
+    projectiles.forEach((projectile) => {
+      if (
+        !projectile.active ||
+        !this.boss?.active ||
+        !this.isBossActive
+      ) {
+        return;
+      }
 
-        if (
-          !this.physics.overlap(
-            projectile,
-            this.boss!,
-          )
-        ) {
-          return;
-        }
+      if (
+        !this.physics.overlap(
+          projectile,
+          this.boss,
+        )
+      ) {
+        return;
+      }
 
-        const damage =
-          this.shootingManager
-            .getProjectileDamage(
-              projectile,
-            );
+      const damage =
+        this.shootingManager.getProjectileDamage(
+          projectile,
+        );
 
-        projectile.destroy();
+      projectile.destroy();
+      this.statsManager.recordHit();
 
-        this.statsManager.recordHit();
+      const bossDefeated =
+        this.boss.takeDamage(damage);
 
-        const bossDefeated =
-          this.boss!.takeDamage(
-            damage,
-          );
+      this.updateBossHealthBar();
 
-        this.updateBossHealthBar();
-
-        if (
-          bossDefeated
-        ) {
-          this.defeatBoss();
-        }
-      },
-    );
+      if (bossDefeated) {
+        this.defeatBoss();
+      }
+    });
   }
 
   private checkEnemyPlayerCollisions() {
@@ -899,10 +930,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    for (
-      const enemy of
-      this.enemies
-    ) {
+    for (const enemy of this.enemies) {
       if (
         !enemy.active ||
         !this.physics.overlap(
@@ -914,7 +942,6 @@ export class GameScene extends Phaser.Scene {
       }
 
       enemy.destroy();
-
       this.damagePlayer();
 
       return;
@@ -929,31 +956,31 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const projectiles:
+    const destructibleHazards:
       Phaser.Physics.Arcade.Sprite[] = [
         ...this.bossProjectiles,
         ...this.graterProjectiles,
         ...this.colanderProjectiles,
         ...this.pepperProjectiles,
+        ...this.doughStripProjectiles,
         ...this.boilingWaterHazards,
       ];
 
     for (
-      const projectile of
-      projectiles
+      const hazard of
+      destructibleHazards
     ) {
       if (
-        !projectile.active ||
+        !hazard.active ||
         !this.physics.overlap(
           this.player,
-          projectile,
+          hazard,
         )
       ) {
         continue;
       }
 
-      projectile.destroy();
-
+      hazard.destroy();
       this.damagePlayer();
 
       return;
@@ -974,7 +1001,24 @@ export class GameScene extends Phaser.Scene {
       }
 
       this.damagePlayer();
+      return;
+    }
 
+    for (
+      const roller of
+      this.pastaRollerLaneHazards
+    ) {
+      if (
+        !roller.active ||
+        !this.physics.overlap(
+          this.player,
+          roller,
+        )
+      ) {
+        continue;
+      }
+
+      this.damagePlayer();
       return;
     }
   }
@@ -991,29 +1035,25 @@ export class GameScene extends Phaser.Scene {
 
     this.powerUpManager
       .getActivePowerUps()
-      .forEach(
-        (powerUp) => {
-          if (
-            !powerUp.active ||
-            !this.physics.overlap(
-              this.player,
-              powerUp,
-            )
-          ) {
-            return;
-          }
+      .forEach((powerUp) => {
+        if (
+          !powerUp.active ||
+          !this.physics.overlap(
+            this.player,
+            powerUp,
+          )
+        ) {
+          return;
+        }
 
-          this.powerUpManager
-            .activatePowerUp(
-              powerUp.getPowerUpType(),
-            );
+        this.powerUpManager.activatePowerUp(
+          powerUp.getPowerUpType(),
+        );
 
-          this.powerUpManager
-            .removePowerUp(
-              powerUp,
-            );
-        },
-      );
+        this.powerUpManager.removePowerUp(
+          powerUp,
+        );
+      });
   }
 
   private damagePlayer() {
@@ -1051,14 +1091,8 @@ export class GameScene extends Phaser.Scene {
     this.isPlayerInvulnerable = true;
     this.isPlayerRespawning = true;
 
-    this.player.setVelocity(
-      0,
-      0,
-    );
-
-    this.player.setVisible(
-      false,
-    );
+    this.player.setVelocity(0, 0);
+    this.player.setVisible(false);
 
     const body =
       this.player.body as Phaser.Physics.Arcade.Body;
@@ -1081,19 +1115,12 @@ export class GameScene extends Phaser.Scene {
           PLAYER_START_Y,
         );
 
-        body.enable =
-          true;
+        body.enable = true;
 
-        this.player.setVisible(
-          true,
-        );
+        this.player.setVisible(true);
+        this.player.setAlpha(1);
 
-        this.player.setAlpha(
-          1,
-        );
-
-        this.isPlayerRespawning =
-          false;
+        this.isPlayerRespawning = false;
 
         this.startInvulnerabilityBlink();
       },
@@ -1109,59 +1136,39 @@ export class GameScene extends Phaser.Scene {
       repeat: 6,
 
       onComplete: () => {
-        this.player.setAlpha(
-          1,
-        );
-
-        this.isPlayerInvulnerable =
-          false;
+        this.player.setAlpha(1);
+        this.isPlayerInvulnerable = false;
       },
     });
   }
 
   private gameOver() {
-    this.isGameOver =
-      true;
+    this.isGameOver = true;
+    this.isBossActive = false;
 
-    this.isBossActive =
-      false;
-
-    this.isPlayerRespawning =
-      false;
-
-    this.isPlayerInvulnerable =
-      false;
+    this.isPlayerRespawning = false;
+    this.isPlayerInvulnerable = false;
 
     this.physics.pause();
 
-    this.player.setVelocity(
-      0,
-      0,
-    );
-
-    this.player.setVisible(
-      false,
-    );
+    this.player.setVelocity(0, 0);
+    this.player.setVisible(false);
 
     const body =
       this.player.body as Phaser.Physics.Arcade.Body;
 
-    body.enable =
-      false;
+    body.enable = false;
 
     this.clearStageObjects();
 
     this.boss?.destroy();
-    this.boss =
-      undefined;
+    this.boss = undefined;
 
     this.destroyBossHealthBar();
 
     this.uiManager.showGameOver(
       () => {
-        if (
-          !this.isGameOver
-        ) {
+        if (!this.isGameOver) {
           return;
         }
 
@@ -1236,19 +1243,29 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    this.isBossActive =
-      true;
+    this.isBossActive = true;
 
     this.uiManager.setWaveLabel(
       "BOSS",
     );
 
-    this.boss =
-      new Boss(
-        this,
-        112,
-        55,
-      );
+    if (
+      this.currentStage === 2
+    ) {
+      this.boss =
+        new PastaMachineBoss(
+          this,
+          112,
+          55,
+        );
+    } else {
+      this.boss =
+        new Boss(
+          this,
+          112,
+          55,
+        );
+    }
 
     this.createBossHealthBar();
   }
@@ -1260,19 +1277,17 @@ export class GameScene extends Phaser.Scene {
     this.bossHealthBar =
       this.add.graphics();
 
-    this.bossHealthBarBackground
-      .fillStyle(
-        0x5c201a,
-        1,
-      );
+    this.bossHealthBarBackground.fillStyle(
+      0x5c201a,
+      1,
+    );
 
-    this.bossHealthBarBackground
-      .fillRect(
-        42,
-        30,
-        140,
-        6,
-      );
+    this.bossHealthBarBackground.fillRect(
+      42,
+      30,
+      140,
+      6,
+    );
 
     this.updateBossHealthBar();
   }
@@ -1306,65 +1321,42 @@ export class GameScene extends Phaser.Scene {
 
   private destroyBossHealthBar() {
     this.bossHealthBar?.destroy();
-
     this.bossHealthBarBackground?.destroy();
 
-    this.bossHealthBar =
-      undefined;
-
-    this.bossHealthBarBackground =
-      undefined;
+    this.bossHealthBar = undefined;
+    this.bossHealthBarBackground = undefined;
   }
 
   private defeatBoss() {
-    if (
-      !this.boss
-    ) {
+    if (!this.boss) {
       return;
     }
 
-    this.isBossActive =
-      false;
+    this.isBossActive = false;
 
     this.boss.destroy();
-
-    this.boss =
-      undefined;
+    this.boss = undefined;
 
     this.clearEnemyProjectiles();
     this.destroyBossHealthBar();
 
-    this.addScore(
-      BOSS_SCORE,
-    );
-
+    this.addScore(BOSS_SCORE);
     this.stageClear();
   }
 
   private stageClear() {
-    this.isStageClear =
-      true;
+    this.isStageClear = true;
 
-    this.isPlayerRespawning =
-      false;
+    this.isPlayerRespawning = false;
+    this.isPlayerInvulnerable = false;
 
-    this.isPlayerInvulnerable =
-      false;
-
-    this.player.setVelocity(
-      0,
-      0,
-    );
-
-    this.player.setVisible(
-      false,
-    );
+    this.player.setVelocity(0, 0);
+    this.player.setVisible(false);
 
     const body =
       this.player.body as Phaser.Physics.Arcade.Body;
 
-    body.enable =
-      false;
+    body.enable = false;
 
     this.shootingManager.clear();
     this.powerUpManager.clear();
@@ -1381,10 +1373,7 @@ export class GameScene extends Phaser.Scene {
         this.showStageResults(
           `STAGE ${this.currentStage
             .toString()
-            .padStart(
-              2,
-              "0",
-            )} CLEAR`,
+            .padStart(2, "0")} CLEAR`,
         );
       },
     );
@@ -1393,18 +1382,14 @@ export class GameScene extends Phaser.Scene {
   private showStageResults(
     title: string,
   ) {
-    this.isResultsVisible =
-      true;
+    this.isResultsVisible = true;
 
-    this.player.setVisible(
-      false,
-    );
+    this.player.setVisible(false);
 
     const body =
       this.player.body as Phaser.Physics.Arcade.Body;
 
-    body.enable =
-      false;
+    body.enable = false;
 
     this.uiManager.showResults({
       title,
@@ -1424,32 +1409,20 @@ export class GameScene extends Phaser.Scene {
   private showGameComplete() {
     this.uiManager.hideResults();
 
-    this.isResultsVisible =
-      false;
-
-    this.isStageClear =
-      false;
-
-    this.isGameComplete =
-      true;
+    this.isResultsVisible = false;
+    this.isStageClear = false;
+    this.isGameComplete = true;
 
     this.shootingManager.clear();
     this.powerUpManager.clear();
 
-    this.player.setVelocity(
-      0,
-      0,
-    );
-
-    this.player.setVisible(
-      false,
-    );
+    this.player.setVelocity(0, 0);
+    this.player.setVisible(false);
 
     const body =
       this.player.body as Phaser.Physics.Arcade.Body;
 
-    body.enable =
-      false;
+    body.enable = false;
 
     this.uiManager.showGameComplete(
       this.statsManager.getScore(),
