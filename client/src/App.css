@@ -14,13 +14,28 @@
   background: #090705;
 }
 
-.game-container {
+.game-frame {
   width: min(90vw, 672px);
   aspect-ratio: 224 / 288;
 
   border: 4px solid #2a2118;
+  background: #17120d;
+
+  overflow: hidden;
+  line-height: 0;
+}
+
+.game-container {
+  width: 100%;
+  height: 100%;
 
   background: #17120d;
 
   image-rendering: pixelated;
+  overflow: hidden;
+}
+
+.game-container canvas {
+  display: block;
+  margin: 0 !important;
 }
